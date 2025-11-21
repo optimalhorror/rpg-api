@@ -54,7 +54,7 @@ async def root():
     }
 
 
-@app.api_route("/mcp", methods=["GET", "POST"])
+@app.api_route("/mcp", methods=["GET", "POST", "OPTIONS", "HEAD"])
 async def mcp_endpoint(request: Request):
     """
     Unified MCP endpoint supporting both GET (SSE) and POST (JSON-RPC).
@@ -62,10 +62,32 @@ async def mcp_endpoint(request: Request):
     This follows the MCP Streamable HTTP specification (2025-03-26).
     - POST: Handle JSON-RPC messages (client-to-server)
     - GET: Establish SSE stream (server-to-client)
+    - OPTIONS: CORS preflight
+    - HEAD: Connection check
     """
     # Log incoming request for debugging
     print(f"[MCP] {request.method} {request.url}")
     print(f"[MCP] Headers: {dict(request.headers)}")
+
+    # Handle OPTIONS for CORS preflight
+    if request.method == "OPTIONS":
+        print("[MCP] Handling OPTIONS preflight")
+        return JSONResponse(
+            content={"status": "ok"},
+            headers={
+                "Allow": "GET, POST, OPTIONS, HEAD",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+
+    # Handle HEAD for connection checks
+    if request.method == "HEAD":
+        print("[MCP] Handling HEAD request")
+        return JSONResponse(
+            content={"status": "ok"},
+            headers={"Allow": "GET, POST, OPTIONS, HEAD"}
+        )
 
     if request.method == "POST":
         # Handle JSON-RPC message
