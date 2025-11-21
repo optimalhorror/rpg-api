@@ -34,15 +34,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
-if Config.ALLOWED_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=Config.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# CORS middleware - allow all origins since security is via IP whitelist
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (security via IP whitelist)
+    allow_credentials=False,  # Can't use credentials with wildcard origin
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
