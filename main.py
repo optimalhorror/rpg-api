@@ -1,15 +1,16 @@
 """FastAPI SSE transport for RPG MCP Server."""
 import sys
+import json
+import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from fastapi.responses import StreamingResponse, JSONResponse
 
 from config import Config
+from mcp_bridge import bridge
 
 
 # Add MCP server to Python path
@@ -120,25 +121,51 @@ async def list_tools():
 
     This is a convenience endpoint for discovering available tools.
     """
-    # Import MCP server to get tools
     try:
-        from server import app as mcp_app
-
-        # Get tools from MCP server
-        tools = await mcp_app._list_tools_handler()
-
-        return {
-            "tools": [
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "inputSchema": tool.inputSchema
-                }
-                for tool in tools
-            ]
-        }
+        tools = await bridge.list_tools()
+        return {"tools": tools}
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/tools/{tool_name}")
+async def call_tool(tool_name: str, request: Request):
+    """
+    Call a specific MCP tool.
+
+    Args:
+        tool_name: Name of the tool to call
+        request: Request containing tool arguments in body
+
+    Returns:
+        Tool execution result
+    """
+    try:
+        arguments = await request.json()
+        result = await bridge.call_tool(tool_name, arguments)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/resources")
+async def list_resources():
+    """List available MCP resources."""
+    try:
+        resources = await bridge.list_resources()
+        return {"resources": resources}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/resources/{uri:path}")
+async def read_resource(uri: str):
+    """Read a specific resource by URI."""
+    try:
+        resource = await bridge.read_resource(uri)
+        return resource
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
