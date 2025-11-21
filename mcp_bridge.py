@@ -79,7 +79,7 @@ class MCPBridge:
         resources = await mcp_list_resources()
         return [
             {
-                "uri": resource.uri,
+                "uri": str(resource.uri),
                 "name": resource.name,
                 "description": resource.description,
                 "mimeType": resource.mimeType
