@@ -92,6 +92,7 @@ class MCPBridge:
         content = await mcp_read_resource(uri)
         return {
             "uri": uri,
+            "mimeType": "application/json",
             "text": content
         }
 
