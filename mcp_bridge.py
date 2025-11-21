@@ -16,6 +16,19 @@ from tools import (
     handle_remove_from_combat,
     get_create_bestiary_entry_tool,
     handle_create_bestiary_entry,
+    # Resource readers
+    get_list_campaigns_tool,
+    handle_list_campaigns,
+    get_get_campaign_tool,
+    handle_get_campaign,
+    get_list_npcs_tool,
+    handle_list_npcs,
+    get_get_npc_tool,
+    handle_get_npc,
+    get_get_combat_status_tool,
+    handle_get_combat_status,
+    get_get_bestiary_tool,
+    handle_get_bestiary,
 )
 from resources import list_resources as mcp_list_resources, read_resource as mcp_read_resource
 
@@ -36,6 +49,13 @@ class MCPBridge:
             "attack": handle_attack,
             "remove_from_combat": handle_remove_from_combat,
             "create_bestiary_entry": handle_create_bestiary_entry,
+            # Resource readers
+            "list_campaigns": handle_list_campaigns,
+            "get_campaign": handle_get_campaign,
+            "list_npcs": handle_list_npcs,
+            "get_npc": handle_get_npc,
+            "get_combat_status": handle_get_combat_status,
+            "get_bestiary": handle_get_bestiary,
         }
 
         # Map of tool names to their definitions
@@ -45,6 +65,13 @@ class MCPBridge:
             "attack": get_attack_tool(),
             "remove_from_combat": get_remove_from_combat_tool(),
             "create_bestiary_entry": get_create_bestiary_entry_tool(),
+            # Resource readers
+            "list_campaigns": get_list_campaigns_tool(),
+            "get_campaign": get_get_campaign_tool(),
+            "list_npcs": get_list_npcs_tool(),
+            "get_npc": get_get_npc_tool(),
+            "get_combat_status": get_get_combat_status_tool(),
+            "get_bestiary": get_get_bestiary_tool(),
         }
 
     async def list_tools(self):
