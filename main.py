@@ -63,14 +63,88 @@ async def handle_message(request: Request):
     This endpoint receives JSON-RPC messages from clients.
     """
     message = await request.json()
+    method = message.get("method")
+    msg_id = message.get("id")
+    params = message.get("params", {})
 
-    # TODO: Process message through MCP server
-    # For now, return echo
-    return {
-        "jsonrpc": "2.0",
-        "id": message.get("id"),
-        "result": {"echo": message}
-    }
+    try:
+        # Handle initialize request
+        if method == "initialize":
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {},
+                        "resources": {}
+                    },
+                    "serverInfo": {
+                        "name": "rpg-mcp-api",
+                        "version": "0.1.0"
+                    }
+                }
+            }
+
+        # Handle tools/list request
+        elif method == "tools/list":
+            tools = await bridge.list_tools()
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"tools": tools}
+            }
+
+        # Handle tools/call request
+        elif method == "tools/call":
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+            result = await bridge.call_tool(tool_name, arguments)
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"content": result}
+            }
+
+        # Handle resources/list request
+        elif method == "resources/list":
+            resources = await bridge.list_resources()
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"resources": resources}
+            }
+
+        # Handle resources/read request
+        elif method == "resources/read":
+            uri = params.get("uri")
+            resource = await bridge.read_resource(uri)
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"contents": [resource]}
+            }
+
+        # Unknown method
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}"
+                }
+            }
+
+    except Exception as e:
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {
+                "code": -32603,
+                "message": f"Internal error: {str(e)}"
+            }
+        }
 
 
 @app.get("/sse")
@@ -79,29 +153,36 @@ async def sse_endpoint(request: Request):
     Server-Sent Events endpoint for receiving messages from the server.
 
     This endpoint streams messages from the MCP server to the client.
+    For HTTP/SSE transport, the client sends requests via POST /messages
+    and receives responses synchronously. This SSE endpoint is mainly
+    for server-initiated notifications (like progress updates).
     """
     async def event_stream():
         """Generate SSE events."""
         try:
-            # Send initial connection event
-            yield f"event: connected\n"
-            yield f"data: {{'status': 'connected'}}\n\n"
+            # Send endpoint event to indicate SSE stream is ready
+            yield f"event: endpoint\n"
+            yield f"data: /messages\n\n"
 
-            # TODO: Connect to MCP server and stream events
-            # For now, keep connection alive
+            # Keep connection alive for any server-initiated messages
             while True:
                 if await request.is_disconnected():
                     break
 
-                # Heartbeat every 30 seconds
-                import asyncio
+                # Heartbeat every 30 seconds to keep connection alive
                 await asyncio.sleep(30)
-                yield f"event: heartbeat\n"
-                yield f"data: {{'status': 'alive'}}\n\n"
+                yield f": heartbeat\n\n"
 
         except Exception as e:
-            yield f"event: error\n"
-            yield f"data: {{'error': '{str(e)}'}}\n\n"
+            error_msg = json.dumps({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": f"SSE stream error: {str(e)}"
+                }
+            })
+            yield f"event: message\n"
+            yield f"data: {error_msg}\n\n"
 
     return StreamingResponse(
         event_stream(),
