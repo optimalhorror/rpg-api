@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 # Import directly from MCP server modules
-sys.path.insert(0, str(Path(__file__).parent / "mcp" / "src"))
+sys.path.insert(0, str(Path(__file__).parent / "mcp_src" / "src"))
 
 from tools import (
     get_begin_campaign_tool,

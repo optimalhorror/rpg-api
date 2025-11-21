@@ -22,7 +22,7 @@ class Config:
     ]
 
     # MCP Server path
-    MCP_SERVER_PATH: Path = Path(os.getenv("MCP_SERVER_PATH", "./mcp"))
+    MCP_SERVER_PATH: Path = Path(os.getenv("MCP_SERVER_PATH", "./mcp_src"))
 
     @classmethod
     def validate(cls) -> None:
