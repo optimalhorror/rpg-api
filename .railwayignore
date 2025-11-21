@@ -1,0 +1,2 @@
+# Don't ignore the mcp submodule - we need it!
+!mcp/
