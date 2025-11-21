@@ -44,16 +44,7 @@ app.add_middleware(
 )
 
 
-@app.get("/")
-async def root():
-    """Health check endpoint."""
-    return {
-        "service": "RPG MCP API",
-        "status": "running",
-        "version": "0.1.0"
-    }
-
-
+@app.api_route("/", methods=["GET", "POST", "OPTIONS", "HEAD"])
 @app.api_route("/mcp", methods=["GET", "POST", "OPTIONS", "HEAD"])
 async def mcp_endpoint(request: Request):
     """
