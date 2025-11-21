@@ -270,14 +270,16 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
 
     result = "=== COMBAT STATUS ===\n\n"
 
-    participants = combat_data.get("participants", [])
+    participants = combat_data.get("participants", {})
     if participants:
         result += "Participants:\n"
-        for p in participants:
-            name = p.get("name")
-            health = p.get("health")
-            max_health = p.get("max_health")
-            result += f"- {name}: {health}/{max_health} HP\n"
+        for name, stats in participants.items():
+            health = stats.get("health")
+            max_health = stats.get("max_health")
+            team = stats.get("team", "?")
+            result += f"- {name} (Team {team}): {health}/{max_health} HP\n"
+    else:
+        result += "No participants in combat.\n"
 
     result += f"\nFull combat data:\n{json.dumps(combat_data, indent=2)}"
 
