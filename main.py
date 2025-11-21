@@ -157,6 +157,12 @@ async def mcp_endpoint(request: Request):
                 }
                 return JSONResponse(response)
 
+            # Handle notifications/initialized (no response needed)
+            elif method == "notifications/initialized":
+                print("[MCP] Client sent initialized notification")
+                # Notifications don't get responses, return 202 Accepted
+                return JSONResponse({"status": "accepted"}, status_code=202)
+
             # Unknown method
             else:
                 response = {
