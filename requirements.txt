@@ -2,6 +2,3 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-dotenv>=1.0.0
 mcp>=1.21.2
-
-# Install MCP server from submodule
--e ./mcp

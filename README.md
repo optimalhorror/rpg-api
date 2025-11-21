@@ -8,13 +8,13 @@ FastAPI-based HTTP/SSE transport for the [RPG MCP Server](https://github.com/opt
 - **RESTful API** - Simple HTTP endpoints for tools and resources
 - **SSE Support** - Server-Sent Events for streaming (MCP protocol ready)
 - **No Authentication** - Security via IP whitelist at deployment level
-- **Git Submodule** - MCP server as submodule for version control
+- **Embedded MCP Server** - MCP server source included directly
 
 ## Setup
 
-1. Clone with submodules:
+1. Clone the repository:
 ```bash
-git clone --recursive https://github.com/yourusername/rpg-api.git
+git clone https://github.com/yourusername/rpg-api.git
 cd rpg-api
 ```
 
@@ -156,19 +156,11 @@ fly deploy
 # Configure IP whitelist in fly.toml
 ```
 
-## MCP Submodule
+## MCP Server Source
 
-The `mcp/` directory is a git submodule pointing to the public MCP server.
+The `mcp/` directory contains a copy of the [RPG MCP Server](https://github.com/optimalhorror/rpg-mcp-server) source code.
 
-**Update submodule:**
-```bash
-git submodule update --remote mcp
-```
-
-**Clone with submodules:**
-```bash
-git clone --recursive <repo-url>
-```
+To update to the latest version, manually copy from the public repo.
 
 ## Development
 
@@ -202,7 +194,7 @@ rpg-api/
 ├── .env                 # Environment variables (gitignored)
 ├── .env.example         # Example configuration
 ├── pyproject.toml       # Python dependencies
-└── mcp/                 # Git submodule → rpg-mcp-server
+└── mcp/                 # MCP server source code
     └── src/
         ├── server.py
         ├── tools/
