@@ -54,144 +54,166 @@ async def root():
     }
 
 
-@app.post("/messages")
-async def handle_message(request: Request):
+@app.api_route("/mcp", methods=["GET", "POST"])
+async def mcp_endpoint(request: Request):
     """
-    Handle MCP messages via HTTP POST.
+    Unified MCP endpoint supporting both GET (SSE) and POST (JSON-RPC).
 
-    This endpoint receives JSON-RPC messages from clients.
+    This follows the MCP Streamable HTTP specification (2025-03-26).
+    - POST: Handle JSON-RPC messages (client-to-server)
+    - GET: Establish SSE stream (server-to-client)
     """
-    message = await request.json()
-    method = message.get("method")
-    msg_id = message.get("id")
-    params = message.get("params", {})
+    # Log incoming request for debugging
+    print(f"[MCP] {request.method} {request.url}")
+    print(f"[MCP] Headers: {dict(request.headers)}")
 
-    try:
-        # Handle initialize request
-        if method == "initialize":
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {},
-                        "resources": {}
-                    },
-                    "serverInfo": {
-                        "name": "rpg-mcp-api",
-                        "version": "0.1.0"
+    if request.method == "POST":
+        # Handle JSON-RPC message
+        try:
+            message = await request.json()
+            print(f"[MCP] Received: {json.dumps(message, indent=2)}")
+
+            method = message.get("method")
+            msg_id = message.get("id")
+            params = message.get("params", {})
+
+            # Handle initialize request
+            if method == "initialize":
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                            "resources": {}
+                        },
+                        "serverInfo": {
+                            "name": "rpg-mcp-api",
+                            "version": "0.1.0"
+                        }
                     }
                 }
-            }
+                print(f"[MCP] Response: {json.dumps(response, indent=2)}")
+                return JSONResponse(response)
 
-        # Handle tools/list request
-        elif method == "tools/list":
-            tools = await bridge.list_tools()
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"tools": tools}
-            }
-
-        # Handle tools/call request
-        elif method == "tools/call":
-            tool_name = params.get("name")
-            arguments = params.get("arguments", {})
-            result = await bridge.call_tool(tool_name, arguments)
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"content": result}
-            }
-
-        # Handle resources/list request
-        elif method == "resources/list":
-            resources = await bridge.list_resources()
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"resources": resources}
-            }
-
-        # Handle resources/read request
-        elif method == "resources/read":
-            uri = params.get("uri")
-            resource = await bridge.read_resource(uri)
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"contents": [resource]}
-            }
-
-        # Unknown method
-        else:
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Method not found: {method}"
+            # Handle tools/list request
+            elif method == "tools/list":
+                tools = await bridge.list_tools()
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {"tools": tools}
                 }
-            }
+                print(f"[MCP] Returning {len(tools)} tools")
+                return JSONResponse(response)
 
-    except Exception as e:
-        return {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "error": {
-                "code": -32603,
-                "message": f"Internal error: {str(e)}"
-            }
-        }
+            # Handle tools/call request
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                print(f"[MCP] Calling tool: {tool_name}")
+                result = await bridge.call_tool(tool_name, arguments)
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {"content": result}
+                }
+                return JSONResponse(response)
 
+            # Handle resources/list request
+            elif method == "resources/list":
+                resources = await bridge.list_resources()
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {"resources": resources}
+                }
+                print(f"[MCP] Returning {len(resources)} resources")
+                return JSONResponse(response)
 
-@app.get("/sse")
-async def sse_endpoint(request: Request):
-    """
-    Server-Sent Events endpoint for receiving messages from the server.
+            # Handle resources/read request
+            elif method == "resources/read":
+                uri = params.get("uri")
+                print(f"[MCP] Reading resource: {uri}")
+                resource = await bridge.read_resource(uri)
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {"contents": [resource]}
+                }
+                return JSONResponse(response)
 
-    This endpoint streams messages from the MCP server to the client.
-    For HTTP/SSE transport, the client sends requests via POST /messages
-    and receives responses synchronously. This SSE endpoint is mainly
-    for server-initiated notifications (like progress updates).
-    """
-    async def event_stream():
-        """Generate SSE events."""
-        try:
-            # Send endpoint event to indicate SSE stream is ready
-            yield f"event: endpoint\n"
-            yield f"data: /messages\n\n"
-
-            # Keep connection alive for any server-initiated messages
-            while True:
-                if await request.is_disconnected():
-                    break
-
-                # Heartbeat every 30 seconds to keep connection alive
-                await asyncio.sleep(30)
-                yield f": heartbeat\n\n"
+            # Unknown method
+            else:
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Method not found: {method}"
+                    }
+                }
+                print(f"[MCP] Unknown method: {method}")
+                return JSONResponse(response, status_code=400)
 
         except Exception as e:
-            error_msg = json.dumps({
+            print(f"[MCP] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            response = {
                 "jsonrpc": "2.0",
+                "id": message.get("id") if 'message' in locals() else None,
                 "error": {
                     "code": -32603,
-                    "message": f"SSE stream error: {str(e)}"
+                    "message": f"Internal error: {str(e)}"
                 }
-            })
-            yield f"event: message\n"
-            yield f"data: {error_msg}\n\n"
+            }
+            return JSONResponse(response, status_code=500)
 
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disable buffering in nginx
-        }
-    )
+    elif request.method == "GET":
+        # Handle SSE stream
+        print("[MCP] Establishing SSE stream")
+
+        async def event_stream():
+            """Generate SSE events for server-to-client messages."""
+            try:
+                # Send endpoint event per MCP spec
+                yield f"event: endpoint\n"
+                yield f"data: /mcp\n\n"
+                print("[MCP] SSE stream established")
+
+                # Keep connection alive for server-initiated messages
+                while True:
+                    if await request.is_disconnected():
+                        print("[MCP] Client disconnected")
+                        break
+
+                    # Heartbeat every 30 seconds
+                    await asyncio.sleep(30)
+                    yield f": heartbeat\n\n"
+
+            except Exception as e:
+                print(f"[MCP] SSE error: {str(e)}")
+                error_msg = json.dumps({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32603,
+                        "message": f"SSE stream error: {str(e)}"
+                    }
+                })
+                yield f"event: message\n"
+                yield f"data: {error_msg}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
 
 
 @app.get("/tools")
