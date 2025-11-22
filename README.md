@@ -2,204 +2,204 @@
 
 FastAPI-based HTTP/SSE transport for the [RPG MCP Server](https://github.com/optimalhorror/rpg-mcp-server).
 
+Provides HTTP endpoints for Claude.ai Web to connect and run D&D-style campaigns remotely.
+
 ## Features
 
-- **Full MCP Integration** - All RPG tools and resources accessible via HTTP
-- **RESTful API** - Simple HTTP endpoints for tools and resources
-- **SSE Support** - Server-Sent Events for streaming (MCP protocol ready)
-- **No Authentication** - Security via IP whitelist at deployment level
-- **Embedded MCP Server** - MCP server source included directly
+- **MCP Streamable HTTP** - Full MCP protocol over HTTP/SSE (2025-03-26 spec)
+- **11 Tools** - Campaign management, NPCs, bestiary, combat, resource readers
+- **Threat Level System** - Creatures with dynamic hit chances (10% → 95%)
+- **Repository Pattern** - Clean abstraction for swapping JSON → database
+- **No Authentication** - Security via IP whitelist on Railway
+- **Persistent Storage** - Railway volume for campaign data
 
-## Setup
+## Quick Start
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/rpg-api.git
-cd rpg-api
-```
-
-2. Install dependencies:
+1. **Install dependencies:**
 ```bash
 uv venv
 source .venv/bin/activate  # or `.venv\Scripts\activate` on Windows
-uv pip install fastapi uvicorn python-dotenv mcp
+uv pip install -r requirements.txt
 ```
 
-3. (Optional) Create `.env` file:
+2. **Run locally:**
 ```bash
-cp .env.example .env
-# Defaults work fine for local development
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-4. Run the server:
-```bash
-uv run python main.py
-```
+3. **Connect from Claude.ai:**
+   - Go to Claude.ai → Settings → Custom Connectors
+   - Add: `http://localhost:8000/`
+   - Start using RPG tools!
 
-Server runs on `http://localhost:8000`
+## MCP Endpoints
 
-## API Endpoints
+The server implements **MCP Streamable HTTP** protocol:
 
-### Health Check
-```bash
-GET /
-```
-Returns server status.
+- `GET /` or `GET /mcp` - SSE stream for server messages
+- `POST /` or `POST /mcp` - JSON-RPC 2.0 for tool calls
 
-### Tools
+Both endpoints support:
+- `initialize` - Protocol handshake
+- `tools/list` - Get available tools
+- `tools/call` - Execute tools
+- `resources/list` - Get available resources
+- `resources/read` - Read resource data
 
-**List all tools:**
-```bash
-GET /tools
-```
+## Tools Available
 
-**Call a tool:**
-```bash
-POST /tools/{tool_name}
-Content-Type: application/json
+### Core Tools (5)
+- `begin_campaign` - Create new campaign with player
+- `create_npc` - Add NPC with optional `hit_chance` (default 50%)
+- `create_bestiary_entry` - Add creatures with mandatory `threat_level`
+- `attack` - Combat with dynamic hit chance based on attacker
+- `remove_from_combat` - Remove from combat (death/flee/surrender)
 
-{
-  "name": "Campaign Name",
-  "player_name": "Hero"
-}
-```
+### Resource Readers (6)
+- `list_campaigns` - List all campaigns
+- `get_campaign` - Get campaign details
+- `list_npcs` - List NPCs in campaign
+- `get_npc` - Get NPC stats
+- `get_combat_status` - View active combat
+- `get_bestiary` - View creature templates
 
-Available tools:
-- `begin_campaign` - Create new campaign
-- `create_npc` - Add NPC to campaign
-- `create_bestiary_entry` - Create enemy template
-- `attack` - Perform combat action
-- `remove_from_combat` - Remove participant from combat
+## Threat Levels
 
-### Resources
+Bestiary entries require `threat_level` (determines hit chance):
 
-**List all resources:**
-```bash
-GET /resources
-```
-
-**Read a resource:**
-```bash
-GET /resources/campaign://list
-GET /resources/campaign://my-campaign/campaign.json
-```
-
-### MCP Protocol
-
-**SSE endpoint** (for streaming):
-```bash
-GET /sse
-```
-
-**JSON-RPC messages** (for full MCP protocol):
-```bash
-POST /messages
-```
+| Level | Hit % | Example |
+|-------|-------|---------|
+| `none` | 10% | Fly |
+| `negligible` | 25% | Dog |
+| `low` | 35% | Wolf |
+| `moderate` | 50% | Bandit |
+| `high` | 65% | Mercenary |
+| `deadly` | 80% | Dragon |
+| `certain_death` | 95% | Eldritch horror |
 
 ## Examples
 
-**Start a new campaign:**
-```bash
-curl -X POST http://localhost:8000/tools/begin_campaign \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "The Lost Kingdom",
-    "player_name": "Aragorn",
-    "player_description": "A brave ranger from the North",
-    "player_health": 25,
-    "player_weapons": {"sword": "1d8", "bow": "1d6"}
-  }'
+**Create bestiary entry:**
+```json
+POST /mcp
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "create_bestiary_entry",
+    "arguments": {
+      "campaign_id": "abc123",
+      "name": "Giant Rat",
+      "threat_level": "negligible",
+      "hp": "3",
+      "weapons": {"bite": "1d4"}
+    }
+  }
+}
 ```
 
-**List all campaigns:**
-```bash
-curl http://localhost:8000/resources
+**Combat with dynamic hit chance:**
+```json
+POST /mcp
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "attack",
+    "arguments": {
+      "campaign_id": "abc123",
+      "attacker": "Dave",
+      "target": "Giant Rat",
+      "weapon": "sword"
+    }
+  }
+}
+```
+→ Giant Rat has 25% hit chance (negligible threat)
+→ Dave has 50% hit chance (default NPC)
+
+## Repository Pattern
+
+Data persistence is abstracted via repositories:
+
+```python
+# Current: JSON files
+from repository_json import JsonNPCRepository
+_npc_repo = JsonNPCRepository()
+
+# Future: Swap to database
+from repository_db import DbNPCRepository
+_npc_repo = DbNPCRepository()
 ```
 
-**Get campaign data:**
-```bash
-curl http://localhost:8000/resources/campaign://the-lost-kingdom/campaign.json
-```
-
-## Environment Variables
-
-- `HOST` - Server host (default: `0.0.0.0`)
-- `PORT` - Server port (default: `8000`)
-- `MCP_SERVER_PATH` - Path to MCP server (default: `./mcp`)
-- `ALLOWED_ORIGINS` - CORS origins, comma-separated (optional)
+See `mcp_src/src/repository_db_example.py` for DB implementation template.
 
 ## Deployment
 
-### Security
-This API has **no built-in authentication**. Secure it at the infrastructure level:
+### Railway (Recommended)
 
-1. **IP Whitelist** - Allow only your IP (Railway, Fly.io, etc.)
-2. **VPN/Tunnel** - Use Tailscale or Cloudflare Tunnel
-3. **Reverse Proxy** - Add auth via Caddy/Nginx
+1. **Create Railway project**
+2. **Connect GitHub repo**
+3. **Add Volume:**
+   - Mount path: `/app/mcp_src/campaigns`
+   - Size: 1GB
+4. **Set IP Whitelist** in Railway settings
+5. **Deploy!**
 
-### Railway
-```bash
-# Deploy to Railway
-railway init
-railway up
-
-# Set environment in Railway dashboard:
-# - Add your IP to whitelist
+The `Procfile` tells Railway how to start:
+```
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-### Fly.io
-```bash
-# Deploy to Fly.io
-fly launch
-fly deploy
+### Environment Variables
 
-# Configure IP whitelist in fly.toml
-```
-
-## MCP Server Source
-
-The `mcp/` directory contains a copy of the [RPG MCP Server](https://github.com/optimalhorror/rpg-mcp-server) source code.
-
-To update to the latest version, manually copy from the public repo.
-
-## Development
-
-**Run with auto-reload:**
-```bash
-uvicorn main:app --reload
-```
-
-**Test endpoints:**
-```bash
-# Health check
-curl http://localhost:8000/
-
-# List tools
-curl http://localhost:8000/tools | jq
-
-# Create campaign
-curl -X POST http://localhost:8000/tools/begin_campaign \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test", "player_name": "Hero"}'
-```
+Optional (defaults work fine):
+- `HOST` - Server host (default: `0.0.0.0`)
+- `PORT` - Server port (default: `8000`)
+- `MCP_SERVER_PATH` - Path to MCP code (default: `./mcp_src`)
+- `ALLOWED_ORIGINS` - CORS origins (default: `*`)
 
 ## Project Structure
 
 ```
 rpg-api/
-├── main.py              # FastAPI application
-├── mcp_bridge.py        # Bridge to MCP server functions
-├── config.py            # Configuration management
-├── auth.py              # (unused - for future auth)
-├── .env                 # Environment variables (gitignored)
-├── .env.example         # Example configuration
-├── pyproject.toml       # Python dependencies
-└── mcp/                 # MCP server source code
-    └── src/
-        ├── server.py
-        ├── tools/
-        └── resources.py
+├── main.py                    # FastAPI app + MCP endpoints
+├── mcp_bridge.py              # Bridge to MCP server
+├── config.py                  # Configuration
+├── requirements.txt           # Python deps
+├── Procfile                   # Railway startup
+├── sync-mcp.sh               # Sync script (private → public)
+└── mcp_src/src/              # MCP server source
+    ├── repository.py          # Abstract interfaces
+    ├── repository_json.py     # JSON implementation
+    ├── repository_db_example.py  # DB template
+    ├── resources.py           # MCP resources
+    ├── utils.py               # Utilities
+    └── tools/                 # Tool implementations
+        ├── campaign.py        # Campaign creation
+        ├── npc.py             # NPC management
+        ├── bestiary.py        # Creature templates
+        ├── combat.py          # Combat system
+        └── readers.py         # Resource readers
 ```
+
+## Security
+
+**No built-in auth** - secure at infrastructure level:
+
+**IP Whitelist** (Railway) - Recommended
+**VPN/Tunnel** (Tailscale, Cloudflare)
+**Reverse Proxy** (Caddy, Nginx with auth)
+
+## Syncing with Public MCP Repo
+
+Use the sync script to copy core MCP code to the public repo:
+
+```bash
+./sync-mcp.sh
+```
+
+This copies `repository*.py` and `tools/*.py` from `mcp_src/` to `../rpg-mcp-server/src/`.
 
 ## License
 
