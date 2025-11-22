@@ -1,4 +1,3 @@
-import json
 from uuid import uuid4
 
 from mcp.types import Tool, TextContent
@@ -8,6 +7,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import CAMPAIGNS_DIR, slugify, load_campaign_list, save_campaign_list
+from repository_json import JsonCampaignRepository, JsonPlayerRepository, JsonNPCRepository
+
+# Global repository instances
+_campaign_repo = JsonCampaignRepository()
+_player_repo = JsonPlayerRepository()
+_npc_repo = JsonNPCRepository()
 
 
 def get_begin_campaign_tool() -> Tool:
@@ -83,7 +88,11 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         }
     }
 
+    # Save campaign data via repository
+    # Note: We still need to create the directory structure first
+    # since campaign_id doesn't exist in the campaign list yet
     campaign_file = campaign_dir / "campaign.json"
+    import json
     campaign_file.write_text(json.dumps(campaign_data, indent=2))
 
     # Create player NPC file
@@ -96,8 +105,8 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         "weapons": player_weapons
     }
 
-    player_file = campaign_dir / f"npc-{player_slug}.json"
-    player_file.write_text(json.dumps(player_data, indent=2))
+    # Save player NPC via repository
+    _npc_repo.save_npc(campaign_id, player_slug, player_data)
 
     # Create npcs.json index with player
     # Add both the player name and "user" as keys pointing to the same file
@@ -111,8 +120,9 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
             "file": f"npc-{player_slug}.json"
         }
     }
-    npcs_file = campaign_dir / "npcs.json"
-    npcs_file.write_text(json.dumps(npcs_index, indent=2))
+
+    # Save NPC index via repository
+    _npc_repo.save_npc_index(campaign_id, npcs_index)
 
     # Update campaign list
     campaign_list = load_campaign_list()

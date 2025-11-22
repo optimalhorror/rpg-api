@@ -1,4 +1,3 @@
-import json
 import random
 import re
 
@@ -8,7 +7,13 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import get_campaign_dir, health_description
+from utils import get_campaign_dir, health_description, slugify
+from repository_json import JsonNPCRepository, JsonBestiaryRepository, JsonCombatRepository
+
+# Global repository instances
+_npc_repo = JsonNPCRepository()
+_bestiary_repo = JsonBestiaryRepository()
+_combat_repo = JsonCombatRepository()
 
 
 def roll_dice(formula: str) -> int:
@@ -47,43 +52,32 @@ def threat_level_to_hit_chance(threat_level: str) -> int:
     return threat_map.get(threat_level, 50)  # Default to 50% if unknown
 
 
-def get_participant_stats(campaign_dir: Path, name: str) -> dict:
+def get_participant_stats(campaign_id: str, name: str) -> dict:
     """Get participant stats: check NPC file first, then bestiary, then defaults."""
-    from utils import slugify
+    participant_slug = slugify(name)
 
     # 1. Check if existing NPC (load persisted health + weapons + hit_chance)
-    npcs_index_file = campaign_dir / "npcs.json"
-    if npcs_index_file.exists():
-        npcs_index = json.loads(npcs_index_file.read_text())
-        participant_slug = slugify(name)
-
-        if participant_slug in npcs_index:
-            npc_file = campaign_dir / npcs_index[participant_slug]["file"]
-            if npc_file.exists():
-                npc_data = json.loads(npc_file.read_text())
-                return {
-                    "health": npc_data.get("health", 20),
-                    "max_health": npc_data.get("max_health", 20),
-                    "weapons": npc_data.get("weapons", {}),
-                    "hit_chance": npc_data.get("hit_chance", 50)
-                }
+    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+    if npc_data:
+        return {
+            "health": npc_data.get("health", 20),
+            "max_health": npc_data.get("max_health", 20),
+            "weapons": npc_data.get("weapons", {}),
+            "hit_chance": npc_data.get("hit_chance", 50)
+        }
 
     # 2. Check bestiary for template (roll new stats + map threat to hit_chance)
-    bestiary_file = campaign_dir / "bestiary.json"
-    if bestiary_file.exists():
-        bestiary = json.loads(bestiary_file.read_text())
-        entry = bestiary.get(name.lower())
-
-        if entry:
-            max_health = roll_dice(entry["hp"])
-            threat_level = entry.get("threat_level", "moderate")
-            hit_chance = threat_level_to_hit_chance(threat_level)
-            return {
-                "health": max_health,
-                "max_health": max_health,
-                "weapons": entry.get("weapons", {}),
-                "hit_chance": hit_chance
-            }
+    entry = _bestiary_repo.get_entry(campaign_id, name)
+    if entry:
+        max_health = roll_dice(entry["hp"])
+        threat_level = entry.get("threat_level", "moderate")
+        hit_chance = threat_level_to_hit_chance(threat_level)
+        return {
+            "health": max_health,
+            "max_health": max_health,
+            "weapons": entry.get("weapons", {}),
+            "hit_chance": hit_chance
+        }
 
     # 3. Default stats
     return {
@@ -137,19 +131,15 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         weapon = arguments["weapon"]
         allied_with = arguments.get("allied_with")
 
-        campaign_dir = get_campaign_dir(campaign_id)
-        combat_file = campaign_dir / "combat-current.json"
-
-        # Load or create combat state
-        if combat_file.exists():
-            combat_state = json.loads(combat_file.read_text())
-        else:
+        # Load or create combat state via repository
+        combat_state = _combat_repo.get_combat_state(campaign_id)
+        if not combat_state:
             combat_state = {"participants": {}, "next_team": 1}
 
         # Initialize participants with team assignment
         for participant in [attacker, target]:
             if participant not in combat_state["participants"]:
-                stats = get_participant_stats(campaign_dir, participant)
+                stats = get_participant_stats(campaign_id, participant)
 
                 # Assign team
                 if participant == attacker and allied_with:
@@ -210,24 +200,20 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 remaining_teams = set(p.get("team", 1) for p in combat_state["participants"].values())
                 if len(remaining_teams) <= 1:
                     # Sync remaining participants' health to NPC files if they exist
-                    npcs_index_file = campaign_dir / "npcs.json"
-                    if npcs_index_file.exists():
-                        npcs_index = json.loads(npcs_index_file.read_text())
+                    npcs_index = _npc_repo.get_npc_index(campaign_id)
 
-                        for participant_name, participant_data in combat_state["participants"].items():
-                            from utils import slugify
-                            participant_slug = slugify(participant_name)
+                    for participant_name, participant_data in combat_state["participants"].items():
+                        participant_slug = slugify(participant_name)
 
-                            # Check if this participant is an NPC
-                            if participant_slug in npcs_index:
-                                npc_file = campaign_dir / npcs_index[participant_slug]["file"]
-                                if npc_file.exists():
-                                    npc_data = json.loads(npc_file.read_text())
-                                    npc_data["health"] = participant_data["health"]
-                                    npc_data["max_health"] = participant_data["max_health"]
-                                    npc_file.write_text(json.dumps(npc_data, indent=2))
+                        # Check if this participant is an NPC
+                        if participant_slug in npcs_index:
+                            npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+                            if npc_data:
+                                npc_data["health"] = participant_data["health"]
+                                npc_data["max_health"] = participant_data["max_health"]
+                                _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
 
-                    combat_file.unlink(missing_ok=True)
+                    _combat_repo.delete_combat_state(campaign_id)
                     result_lines.append("\nCombat has ended!")
             else:
                 result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
@@ -241,8 +227,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 target_max = combat_state["participants"][target]["max_health"]
                 result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
 
-        # Save combat state
-        combat_file.write_text(json.dumps(combat_state, indent=2))
+        # Save combat state via repository
+        _combat_repo.save_combat_state(campaign_id, combat_state)
 
         return [TextContent(type="text", text="\n".join(result_lines))]
 
@@ -284,13 +270,10 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         name = arguments["name"]
         reason = arguments.get("reason", "death")  # Default to death if not specified
 
-        campaign_dir = get_campaign_dir(campaign_id)
-        combat_file = campaign_dir / "combat-current.json"
-
-        if not combat_file.exists():
+        # Load combat state via repository
+        combat_state = _combat_repo.get_combat_state(campaign_id)
+        if not combat_state:
             return [TextContent(type="text", text="No active combat found.")]
-
-        combat_state = json.loads(combat_file.read_text())
 
         if name not in combat_state["participants"]:
             return [TextContent(type="text", text=f"{name} is not in combat.")]
@@ -310,27 +293,23 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         remaining_teams = set(p.get("team", 1) for p in combat_state["participants"].values())
         if len(remaining_teams) <= 1:
             # Sync remaining participants' health to NPC files if they exist
-            npcs_index_file = campaign_dir / "npcs.json"
-            if npcs_index_file.exists():
-                npcs_index = json.loads(npcs_index_file.read_text())
+            npcs_index = _npc_repo.get_npc_index(campaign_id)
 
-                for participant_name, participant_data in combat_state["participants"].items():
-                    from utils import slugify
-                    participant_slug = slugify(participant_name)
+            for participant_name, participant_data in combat_state["participants"].items():
+                participant_slug = slugify(participant_name)
 
-                    # Check if this participant is an NPC
-                    if participant_slug in npcs_index:
-                        npc_file = campaign_dir / npcs_index[participant_slug]["file"]
-                        if npc_file.exists():
-                            npc_data = json.loads(npc_file.read_text())
-                            npc_data["health"] = participant_data["health"]
-                            npc_data["max_health"] = participant_data["max_health"]
-                            npc_file.write_text(json.dumps(npc_data, indent=2))
+                # Check if this participant is an NPC
+                if participant_slug in npcs_index:
+                    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+                    if npc_data:
+                        npc_data["health"] = participant_data["health"]
+                        npc_data["max_health"] = participant_data["max_health"]
+                        _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
 
-            combat_file.unlink(missing_ok=True)
+            _combat_repo.delete_combat_state(campaign_id)
             result_text += "\nCombat has ended!"
         else:
-            combat_file.write_text(json.dumps(combat_state, indent=2))
+            _combat_repo.save_combat_state(campaign_id, combat_state)
 
         return [TextContent(type="text", text=result_text)]
 

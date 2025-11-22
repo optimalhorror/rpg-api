@@ -7,7 +7,19 @@ from mcp.types import Tool, TextContent
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import CAMPAIGNS_DIR, load_campaign_list
+from utils import CAMPAIGNS_DIR
+from repository_json import (
+    JsonCampaignRepository,
+    JsonNPCRepository,
+    JsonBestiaryRepository,
+    JsonCombatRepository,
+)
+
+# Global repository instances
+_campaign_repo = JsonCampaignRepository()
+_npc_repo = JsonNPCRepository()
+_bestiary_repo = JsonBestiaryRepository()
+_combat_repo = JsonCombatRepository()
 
 
 def get_list_campaigns_tool() -> Tool:
@@ -79,19 +91,9 @@ async def handle_get_campaign(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    campaign_list = load_campaign_list()
-    campaign_slug = campaign_list.get(campaign_id)
-
-    if not campaign_slug:
+    campaign_data = _campaign_repo.get_campaign(campaign_id)
+    if not campaign_data:
         return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
-
-    campaign_dir = CAMPAIGNS_DIR / campaign_slug
-    campaign_file = campaign_dir / "campaign.json"
-
-    if not campaign_file.exists():
-        return [TextContent(type="text", text=f"Error: Campaign file not found")]
-
-    campaign_data = json.loads(campaign_file.read_text())
 
     result = f"Campaign: {campaign_data.get('name')}\n"
     result += f"ID: {campaign_data.get('id')}\n"
@@ -126,19 +128,9 @@ async def handle_list_npcs(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    campaign_list = load_campaign_list()
-    campaign_slug = campaign_list.get(campaign_id)
-
-    if not campaign_slug:
-        return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
-
-    campaign_dir = CAMPAIGNS_DIR / campaign_slug
-    npcs_file = campaign_dir / "npcs.json"
-
-    if not npcs_file.exists():
+    npcs_data = _npc_repo.get_npc_index(campaign_id)
+    if not npcs_data:
         return [TextContent(type="text", text="No NPCs found in this campaign.")]
-
-    npcs_data = json.loads(npcs_file.read_text())
 
     result = "NPCs in campaign:\n\n"
     for npc_key, npc_info in npcs_data.items():
@@ -183,30 +175,9 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     if not npc_key:
         return [TextContent(type="text", text="Error: npc_key is required")]
 
-    campaign_list = load_campaign_list()
-    campaign_slug = campaign_list.get(campaign_id)
-
-    if not campaign_slug:
-        return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
-
-    campaign_dir = CAMPAIGNS_DIR / campaign_slug
-    npcs_file = campaign_dir / "npcs.json"
-
-    if not npcs_file.exists():
-        return [TextContent(type="text", text="Error: No NPCs found in this campaign.")]
-
-    npcs_data = json.loads(npcs_file.read_text())
-    npc_info = npcs_data.get(npc_key.lower())
-
-    if not npc_info:
+    npc_data = _npc_repo.get_npc(campaign_id, npc_key.lower())
+    if not npc_data:
         return [TextContent(type="text", text=f"Error: NPC not found: {npc_key}")]
-
-    npc_file = campaign_dir / npc_info.get("file")
-
-    if not npc_file.exists():
-        return [TextContent(type="text", text=f"Error: NPC file not found: {npc_info.get('file')}")]
-
-    npc_data = json.loads(npc_file.read_text())
 
     result = f"NPC: {npc_data.get('name')}\n"
     result += f"Health: {npc_data.get('health')}/{npc_data.get('max_health')}\n"
@@ -255,19 +226,9 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    campaign_list = load_campaign_list()
-    campaign_slug = campaign_list.get(campaign_id)
-
-    if not campaign_slug:
-        return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
-
-    campaign_dir = CAMPAIGNS_DIR / campaign_slug
-    combat_file = campaign_dir / "combat-current.json"
-
-    if not combat_file.exists():
+    combat_data = _combat_repo.get_combat_state(campaign_id)
+    if not combat_data:
         return [TextContent(type="text", text="No active combat.")]
-
-    combat_data = json.loads(combat_file.read_text())
 
     result = "=== COMBAT STATUS ===\n\n"
 
@@ -313,19 +274,9 @@ async def handle_get_bestiary(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    campaign_list = load_campaign_list()
-    campaign_slug = campaign_list.get(campaign_id)
-
-    if not campaign_slug:
-        return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
-
-    campaign_dir = CAMPAIGNS_DIR / campaign_slug
-    bestiary_file = campaign_dir / "bestiary.json"
-
-    if not bestiary_file.exists():
+    bestiary_data = _bestiary_repo.get_bestiary(campaign_id)
+    if not bestiary_data:
         return [TextContent(type="text", text="No bestiary found. Create enemy templates with create_bestiary_entry.")]
-
-    bestiary_data = json.loads(bestiary_file.read_text())
 
     result = "=== BESTIARY ===\n\n"
 

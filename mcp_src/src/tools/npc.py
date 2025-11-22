@@ -1,12 +1,14 @@
-import json
-
 from mcp.types import Tool, TextContent
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import get_campaign_dir, slugify
+from utils import slugify
+from repository_json import JsonNPCRepository
+
+# Global repository instance
+_npc_repo = JsonNPCRepository()
 
 
 def get_create_npc_tool() -> Tool:
@@ -69,10 +71,9 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         health = arguments.get("health", max_health)  # Default to max_health
         hit_chance = arguments.get("hit_chance", 50)  # Default to 50%
 
-        campaign_dir = get_campaign_dir(campaign_id)
         npc_slug = slugify(npc_name)
 
-        # Create NPC file
+        # Create NPC data
         npc_data = {
             "name": npc_name,
             "keywords": keywords,
@@ -83,19 +84,16 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             "hit_chance": hit_chance
         }
 
-        npc_file = campaign_dir / f"npc-{npc_slug}.json"
-        npc_file.write_text(json.dumps(npc_data, indent=2))
+        # Save NPC via repository
+        _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
         # Update NPC index
-        npcs_index_file = campaign_dir / "npcs.json"
-        npcs_index = json.loads(npcs_index_file.read_text()) if npcs_index_file.exists() else {}
-
+        npcs_index = _npc_repo.get_npc_index(campaign_id)
         npcs_index[npc_slug] = {
             "keywords": keywords,
             "file": f"npc-{npc_slug}.json"
         }
-
-        npcs_index_file.write_text(json.dumps(npcs_index, indent=2))
+        _npc_repo.save_npc_index(campaign_id, npcs_index)
 
         return [TextContent(
             type="text",
