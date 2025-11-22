@@ -175,7 +175,39 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
             result_lines.append(f"{attacker} attacks {target} with {weapon}.")
             result_lines.append(f"{target} is hit in the {hit_location}.")
-            result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
+
+            # Check if target died
+            if target_health <= 0:
+                result_lines.append(f"{target} has been slain!")
+
+                # Remove dead target from combat
+                del combat_state["participants"][target]
+
+                # Check if combat should end (only one team remains)
+                remaining_teams = set(p.get("team", 1) for p in combat_state["participants"].values())
+                if len(remaining_teams) <= 1:
+                    # Sync remaining participants' health to NPC files if they exist
+                    npcs_index_file = campaign_dir / "npcs.json"
+                    if npcs_index_file.exists():
+                        npcs_index = json.loads(npcs_index_file.read_text())
+
+                        for participant_name, participant_data in combat_state["participants"].items():
+                            from utils import slugify
+                            participant_slug = slugify(participant_name)
+
+                            # Check if this participant is an NPC
+                            if participant_slug in npcs_index:
+                                npc_file = campaign_dir / npcs_index[participant_slug]["file"]
+                                if npc_file.exists():
+                                    npc_data = json.loads(npc_file.read_text())
+                                    npc_data["health"] = participant_data["health"]
+                                    npc_data["max_health"] = participant_data["max_health"]
+                                    npc_file.write_text(json.dumps(npc_data, indent=2))
+
+                    combat_file.unlink(missing_ok=True)
+                    result_lines.append("\nCombat has ended!")
+            else:
+                result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
         else:
             result_lines.append(f"{attacker} attacks {target} with {weapon}.")
             result_lines.append(f"{target} dodges the attack.")
