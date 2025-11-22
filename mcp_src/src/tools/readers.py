@@ -210,6 +210,7 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
 
     result = f"NPC: {npc_data.get('name')}\n"
     result += f"Health: {npc_data.get('health')}/{npc_data.get('max_health')}\n"
+    result += f"Hit Chance: {npc_data.get('hit_chance', 50)}%\n"
 
     weapons = npc_data.get("weapons", {})
     if weapons:
@@ -277,7 +278,8 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
             health = stats.get("health")
             max_health = stats.get("max_health")
             team = stats.get("team", "?")
-            result += f"- {name} (Team {team}): {health}/{max_health} HP\n"
+            hit_chance = stats.get("hit_chance", 50)
+            result += f"- {name} (Team {team}): {health}/{max_health} HP, {hit_chance}% hit chance\n"
     else:
         result += "No participants in combat.\n"
 
@@ -329,7 +331,8 @@ async def handle_get_bestiary(arguments: dict) -> list[TextContent]:
 
     for enemy_type, enemy_data in bestiary_data.items():
         result += f"{enemy_type}:\n"
-        result += f"  Health: {enemy_data.get('health')}\n"
+        result += f"  Threat Level: {enemy_data.get('threat_level', 'moderate')}\n"
+        result += f"  Health: {enemy_data.get('hp')}\n"
 
         weapons = enemy_data.get("weapons", {})
         if weapons:

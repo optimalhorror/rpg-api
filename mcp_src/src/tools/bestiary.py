@@ -25,6 +25,11 @@ def get_create_bestiary_entry_tool() -> Tool:
                     "type": "string",
                     "description": "Template name (e.g., 'guard', 'goblin', 'dragon')"
                 },
+                "threat_level": {
+                    "type": "string",
+                    "enum": ["none", "negligible", "low", "moderate", "high", "deadly", "certain_death"],
+                    "description": "How dangerous this creature is: none (fly, 10% hit), negligible (dog, 25%), low (wolf, 35%), moderate (bandit, 50%), high (mercenary, 65%), deadly (dragon, 80%), certain_death (eldritch horror, 95%)"
+                },
                 "hp": {
                     "type": "string",
                     "description": "HP formula in dice notation (e.g., '15+1d6', '20', '10+2d4')"
@@ -35,7 +40,7 @@ def get_create_bestiary_entry_tool() -> Tool:
                     "additionalProperties": {"type": "string"}
                 }
             },
-            "required": ["campaign_id", "name", "hp", "weapons"]
+            "required": ["campaign_id", "name", "threat_level", "hp", "weapons"]
         }
     )
 
@@ -45,6 +50,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
     try:
         campaign_id = arguments["campaign_id"]
         name = arguments["name"]
+        threat_level = arguments["threat_level"]
         hp = arguments["hp"]
         weapons = arguments["weapons"]
 
@@ -59,6 +65,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
 
         # Add/update entry
         bestiary[name.lower()] = {
+            "threat_level": threat_level,
             "hp": hp,
             "weapons": weapons
         }
@@ -68,7 +75,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         weapon_list = ", ".join([f"{w} ({d})" for w, d in weapons.items()])
         return [TextContent(
             type="text",
-            text=f"Bestiary entry '{name}' created successfully!\n\nHP: {hp}\nWeapons: {weapon_list}"
+            text=f"Bestiary entry '{name}' created successfully!\n\nThreat Level: {threat_level}\nHP: {hp}\nWeapons: {weapon_list}"
         )]
 
     except Exception as e:

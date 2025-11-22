@@ -46,6 +46,10 @@ def get_create_npc_tool() -> Tool:
                 "max_health": {
                     "type": "integer",
                     "description": "Optional: Maximum health points. Defaults to 20 if not specified."
+                },
+                "hit_chance": {
+                    "type": "integer",
+                    "description": "Optional: Hit chance percentage (1-100). Defaults to 50 if not specified."
                 }
             },
             "required": ["campaign_id", "name", "keywords", "arc"]
@@ -63,6 +67,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         weapons = arguments.get("weapons", {})
         max_health = arguments.get("max_health", 20)
         health = arguments.get("health", max_health)  # Default to max_health
+        hit_chance = arguments.get("hit_chance", 50)  # Default to 50%
 
         campaign_dir = get_campaign_dir(campaign_id)
         npc_slug = slugify(npc_name)
@@ -74,7 +79,8 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             "arc": arc,
             "health": health,
             "max_health": max_health,
-            "weapons": weapons
+            "weapons": weapons,
+            "hit_chance": hit_chance
         }
 
         npc_file = campaign_dir / f"npc-{npc_slug}.json"

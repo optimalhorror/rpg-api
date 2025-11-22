@@ -33,11 +33,25 @@ def roll_dice(formula: str) -> int:
     return 20
 
 
+def threat_level_to_hit_chance(threat_level: str) -> int:
+    """Convert threat level to hit chance percentage."""
+    threat_map = {
+        "none": 10,           # fly - needs lucky eye bite
+        "negligible": 25,     # dog - can hurt but not trained
+        "low": 35,            # wolf - natural hunter
+        "moderate": 50,       # bandit - trained fighter
+        "high": 65,           # mercenary - professional
+        "deadly": 80,         # dragon - apex predator
+        "certain_death": 95   # eldritch horror - reality-bending
+    }
+    return threat_map.get(threat_level, 50)  # Default to 50% if unknown
+
+
 def get_participant_stats(campaign_dir: Path, name: str) -> dict:
     """Get participant stats: check NPC file first, then bestiary, then defaults."""
     from utils import slugify
 
-    # 1. Check if existing NPC (load persisted health + weapons)
+    # 1. Check if existing NPC (load persisted health + weapons + hit_chance)
     npcs_index_file = campaign_dir / "npcs.json"
     if npcs_index_file.exists():
         npcs_index = json.loads(npcs_index_file.read_text())
@@ -50,10 +64,11 @@ def get_participant_stats(campaign_dir: Path, name: str) -> dict:
                 return {
                     "health": npc_data.get("health", 20),
                     "max_health": npc_data.get("max_health", 20),
-                    "weapons": npc_data.get("weapons", {})
+                    "weapons": npc_data.get("weapons", {}),
+                    "hit_chance": npc_data.get("hit_chance", 50)
                 }
 
-    # 2. Check bestiary for template (roll new stats)
+    # 2. Check bestiary for template (roll new stats + map threat to hit_chance)
     bestiary_file = campaign_dir / "bestiary.json"
     if bestiary_file.exists():
         bestiary = json.loads(bestiary_file.read_text())
@@ -61,17 +76,21 @@ def get_participant_stats(campaign_dir: Path, name: str) -> dict:
 
         if entry:
             max_health = roll_dice(entry["hp"])
+            threat_level = entry.get("threat_level", "moderate")
+            hit_chance = threat_level_to_hit_chance(threat_level)
             return {
                 "health": max_health,
                 "max_health": max_health,
-                "weapons": entry.get("weapons", {})
+                "weapons": entry.get("weapons", {}),
+                "hit_chance": hit_chance
             }
 
     # 3. Default stats
     return {
         "health": 20,
         "max_health": 20,
-        "weapons": {}
+        "weapons": {},
+        "hit_chance": 50
     }
 
 
@@ -148,9 +167,13 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
                 combat_state["participants"][participant] = stats
 
-        # Simple combat: roll d20 for hit
+        # Simple combat: roll d20 for hit, using attacker's hit_chance
+        attacker_data = combat_state["participants"][attacker]
+        hit_chance = attacker_data.get("hit_chance", 50)
         hit_roll = random.randint(1, 20)
-        hit = hit_roll >= 6  # 75% hit chance
+        # Convert hit_chance percentage to d20 threshold (e.g., 50% = >= 11, 75% = >= 6)
+        hit_threshold = 21 - int(hit_chance * 20 / 100)
+        hit = hit_roll >= hit_threshold
 
         result_lines = []
 
