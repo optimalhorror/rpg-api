@@ -150,7 +150,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
         # Simple combat: roll d20 for hit
         hit_roll = random.randint(1, 20)
-        hit = hit_roll >= 10  # 50% hit chance
+        hit = hit_roll >= 6  # 75% hit chance
 
         result_lines = []
 
