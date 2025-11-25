@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import slugify
+from utils import slugify, roll_dice, health_description, healing_descriptor
 from repository_json import JsonNPCRepository
 
 # Global repository instance
@@ -81,7 +81,11 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             "health": health,
             "max_health": max_health,
             "weapons": weapons,
-            "hit_chance": hit_chance
+            "hit_chance": hit_chance,
+            "inventory": {
+                "money": 0,
+                "items": {}
+            }
         }
 
         # Save NPC via repository
@@ -102,3 +106,96 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error creating NPC: {str(e)}")]
+
+
+def get_heal_npc_tool() -> Tool:
+    """Return the heal_npc tool definition."""
+    return Tool(
+        name="heal_npc",
+        description="Heal an NPC by rolling healing dice (e.g., '1d4', '2d6'). Healing comes from items, rest, magic, etc. Cannot exceed max_health.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "campaign_id": {
+                    "type": "string",
+                    "description": "The campaign ID"
+                },
+                "npc_name": {
+                    "type": "string",
+                    "description": "Name of the NPC to heal"
+                },
+                "heal_dice": {
+                    "type": "string",
+                    "description": "Healing dice formula (e.g., '1d4', '1d6', '2d8+2')"
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Optional: Source of healing (e.g., 'potion', 'long rest', 'cure wounds spell')"
+                }
+            },
+            "required": ["campaign_id", "npc_name", "heal_dice"]
+        }
+    )
+
+
+async def handle_heal_npc(arguments: dict) -> list[TextContent]:
+    """Handle the heal_npc tool call."""
+    try:
+        campaign_id = arguments["campaign_id"]
+        npc_name = arguments["npc_name"]
+        heal_dice = arguments["heal_dice"]
+        source = arguments.get("source", "healing")
+
+        npc_slug = slugify(npc_name)
+
+        npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+        if not npc_data:
+            return [TextContent(
+                type="text",
+                text=f"NPC '{npc_name}' not found in campaign"
+            )]
+
+        # Roll healing
+        heal_amount = roll_dice(heal_dice)
+
+        old_health = npc_data.get("health", 20)
+        max_health = npc_data.get("max_health", 20)
+
+        # Apply healing, cap at max_health
+        new_health = min(old_health + heal_amount, max_health)
+        npc_data["health"] = new_health
+
+        _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+
+        # Narrative output (hide mechanics)
+        source_str = f" from {source}" if source else ""
+
+        # Special case: already at full health
+        if old_health == max_health:
+            return [TextContent(
+                type="text",
+                text=f"{npc_name} receives healing{source_str}, but is already in perfect health."
+            )]
+
+        # Get healing quality and health states
+        healing_quality = healing_descriptor(heal_amount, heal_dice)
+        old_state = health_description(old_health, max_health)
+        new_state = health_description(new_health, max_health)
+
+        # Build narrative message
+        result_lines = [f"{npc_name} receives {healing_quality}{source_str}."]
+
+        # Special case: fully restored to perfect health
+        if new_health == max_health:
+            result_lines.append(f"{npc_name} is fully restored to perfect health.")
+        else:
+            # Show health state transition
+            result_lines.append(f"{npc_name} recovers from {old_state} to {new_state}.")
+
+        return [TextContent(
+            type="text",
+            text="\n".join(result_lines)
+        )]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error healing NPC: {str(e)}")]

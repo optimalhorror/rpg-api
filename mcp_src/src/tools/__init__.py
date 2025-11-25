@@ -1,7 +1,15 @@
 from .campaign import get_begin_campaign_tool, handle_begin_campaign, get_delete_campaign_tool, handle_delete_campaign
-from .npc import get_create_npc_tool, handle_create_npc
+from .npc import get_create_npc_tool, handle_create_npc, get_heal_npc_tool, handle_heal_npc
 from .combat import get_attack_tool, handle_attack, get_remove_from_combat_tool, handle_remove_from_combat
 from .bestiary import get_create_bestiary_entry_tool, handle_create_bestiary_entry
+from .inventory import (
+    get_add_item_tool, handle_add_item,
+    get_remove_item_tool, handle_remove_item,
+    get_update_item_tool, handle_update_item,
+    get_get_inventory_tool, handle_get_inventory,
+    get_add_money_tool, handle_add_money,
+    get_remove_money_tool, handle_remove_money,
+)
 from .readers import (
     get_list_campaigns_tool, handle_list_campaigns,
     get_get_campaign_tool, handle_get_campaign,
@@ -18,12 +26,27 @@ __all__ = [
     "handle_delete_campaign",
     "get_create_npc_tool",
     "handle_create_npc",
+    "get_heal_npc_tool",
+    "handle_heal_npc",
     "get_attack_tool",
     "handle_attack",
     "get_remove_from_combat_tool",
     "handle_remove_from_combat",
     "get_create_bestiary_entry_tool",
     "handle_create_bestiary_entry",
+    # Inventory tools
+    "get_add_item_tool",
+    "handle_add_item",
+    "get_remove_item_tool",
+    "handle_remove_item",
+    "get_update_item_tool",
+    "handle_update_item",
+    "get_get_inventory_tool",
+    "handle_get_inventory",
+    "get_add_money_tool",
+    "handle_add_money",
+    "get_remove_money_tool",
+    "handle_remove_money",
     # Resource readers
     "get_list_campaigns_tool",
     "handle_list_campaigns",

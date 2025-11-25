@@ -8,14 +8,31 @@ sys.path.insert(0, str(Path(__file__).parent / "mcp_src" / "src"))
 from tools import (
     get_begin_campaign_tool,
     handle_begin_campaign,
+    get_delete_campaign_tool,
+    handle_delete_campaign,
     get_create_npc_tool,
     handle_create_npc,
+    get_heal_npc_tool,
+    handle_heal_npc,
     get_attack_tool,
     handle_attack,
     get_remove_from_combat_tool,
     handle_remove_from_combat,
     get_create_bestiary_entry_tool,
     handle_create_bestiary_entry,
+    # Inventory tools
+    get_add_item_tool,
+    handle_add_item,
+    get_remove_item_tool,
+    handle_remove_item,
+    get_update_item_tool,
+    handle_update_item,
+    get_get_inventory_tool,
+    handle_get_inventory,
+    get_add_money_tool,
+    handle_add_money,
+    get_remove_money_tool,
+    handle_remove_money,
     # Resource readers
     get_list_campaigns_tool,
     handle_list_campaigns,
@@ -45,10 +62,19 @@ class MCPBridge:
         # Map of tool names to their handlers
         self.tool_handlers = {
             "begin_campaign": handle_begin_campaign,
+            "delete_campaign": handle_delete_campaign,
             "create_npc": handle_create_npc,
+            "heal_npc": handle_heal_npc,
             "attack": handle_attack,
             "remove_from_combat": handle_remove_from_combat,
             "create_bestiary_entry": handle_create_bestiary_entry,
+            # Inventory tools
+            "add_item": handle_add_item,
+            "remove_item": handle_remove_item,
+            "update_item": handle_update_item,
+            "get_inventory": handle_get_inventory,
+            "add_money": handle_add_money,
+            "remove_money": handle_remove_money,
             # Resource readers
             "list_campaigns": handle_list_campaigns,
             "get_campaign": handle_get_campaign,
@@ -61,10 +87,19 @@ class MCPBridge:
         # Map of tool names to their definitions
         self.tool_definitions = {
             "begin_campaign": get_begin_campaign_tool(),
+            "delete_campaign": get_delete_campaign_tool(),
             "create_npc": get_create_npc_tool(),
+            "heal_npc": get_heal_npc_tool(),
             "attack": get_attack_tool(),
             "remove_from_combat": get_remove_from_combat_tool(),
             "create_bestiary_entry": get_create_bestiary_entry_tool(),
+            # Inventory tools
+            "add_item": get_add_item_tool(),
+            "remove_item": get_remove_item_tool(),
+            "update_item": get_update_item_tool(),
+            "get_inventory": get_get_inventory_tool(),
+            "add_money": get_add_money_tool(),
+            "remove_money": get_remove_money_tool(),
             # Resource readers
             "list_campaigns": get_list_campaigns_tool(),
             "get_campaign": get_get_campaign_tool(),

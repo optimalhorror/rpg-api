@@ -1,5 +1,4 @@
 import random
-import re
 
 from mcp.types import Tool, TextContent
 
@@ -7,35 +6,13 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import get_campaign_dir, health_description, slugify
+from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor
 from repository_json import JsonNPCRepository, JsonBestiaryRepository, JsonCombatRepository
 
 # Global repository instances
 _npc_repo = JsonNPCRepository()
 _bestiary_repo = JsonBestiaryRepository()
 _combat_repo = JsonCombatRepository()
-
-
-def roll_dice(formula: str) -> int:
-    """Roll dice from a formula like '1d6', '2d4+5', '20'."""
-    formula = formula.lower().strip()
-
-    # Just a number
-    if formula.isdigit():
-        return int(formula)
-
-    # Parse XdY+Z or XdY-Z or XdY
-    match = re.match(r'(\d+)?d(\d+)([+-]\d+)?', formula)
-    if match:
-        count = int(match.group(1) or 1)
-        sides = int(match.group(2))
-        modifier = int(match.group(3) or 0)
-
-        total = sum(random.randint(1, sides) for _ in range(count))
-        return total + modifier
-
-    # Fallback: just return 20
-    return 20
 
 
 def threat_level_to_hit_chance(threat_level: str) -> int:
@@ -114,7 +91,7 @@ def get_attack_tool() -> Tool:
                 },
                 "allied_with": {
                     "type": "string",
-                    "description": "Optional: Name of participant this attacker is allied with. If provided, attacker joins that participant's team. Only used when attacker is joining combat for the first time."
+                    "description": "Optional: Name of participant this attacker is allied with (e.g., 'Marcus', 'player'). Creates or joins that team. To fight solo, use your own name. Anyone can later join your team by using your name in allied_with."
                 }
             },
             "required": ["campaign_id", "attacker", "target", "weapon"]
@@ -134,26 +111,25 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         # Load or create combat state via repository
         combat_state = _combat_repo.get_combat_state(campaign_id)
         if not combat_state:
-            combat_state = {"participants": {}, "next_team": 1}
+            combat_state = {"participants": {}}
 
         # Initialize participants with team assignment
         for participant in [attacker, target]:
             if participant not in combat_state["participants"]:
                 stats = get_participant_stats(campaign_id, participant)
 
-                # Assign team
+                # Assign team (string-based)
                 if participant == attacker and allied_with:
-                    # Copy team from allied participant
+                    # Allied with someone - join their team or create team with their name
                     if allied_with in combat_state["participants"]:
+                        # Copy ally's team
                         stats["team"] = combat_state["participants"][allied_with]["team"]
                     else:
-                        # Allied participant doesn't exist yet, assign new team
-                        stats["team"] = combat_state.get("next_team", 1)
-                        combat_state["next_team"] = stats["team"] + 1
+                        # Ally doesn't exist yet, create team named after them
+                        stats["team"] = allied_with
                 else:
-                    # Assign new team
-                    stats["team"] = combat_state.get("next_team", 1)
-                    combat_state["next_team"] = stats["team"] + 1
+                    # No ally specified - solo team named after participant
+                    stats["team"] = participant
 
                 combat_state["participants"][participant] = stats
 
@@ -168,14 +144,35 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         result_lines = []
 
         if hit:
-            # Get weapon damage from bestiary or default to 1d6
+            # Get weapon damage: check inventory first, then base weapons, then default
             attacker_data = combat_state["participants"][attacker]
-            weapons = attacker_data.get("weapons", {})
+            attacker_slug = slugify(attacker)
+            damage_formula = None
 
-            if weapon in weapons:
-                damage = roll_dice(weapons[weapon])
+            # 1. Check inventory for weapon (NPCs only)
+            npc_data = _npc_repo.get_npc(campaign_id, attacker_slug)
+            if npc_data and "inventory" in npc_data:
+                inventory = npc_data["inventory"]
+                items = inventory.get("items", {})
+                # Look for matching weapon in inventory
+                if weapon in items:
+                    item = items[weapon]
+                    if item.get("weapon") and item.get("damage"):
+                        damage_formula = item["damage"]
+
+            # 2. Fallback to base weapons (from NPC or bestiary)
+            if not damage_formula:
+                weapons = attacker_data.get("weapons", {})
+                if weapon in weapons:
+                    damage_formula = weapons[weapon]
+
+            # 3. Roll damage or default to 1d6
+            if damage_formula:
+                damage = roll_dice(damage_formula)
             else:
                 damage = random.randint(1, 6)  # Default 1d6
+                damage_formula = "1d6"
+
             hit_locations = ["head", "chest", "arm", "leg"]
             hit_location = random.choice(hit_locations)
 
@@ -186,8 +183,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             target_health = combat_state["participants"][target]["health"]
             target_max = combat_state["participants"][target]["max_health"]
 
+            # Narrative output (hide mechanics)
+            damage_desc = damage_descriptor(damage, damage_formula)
             result_lines.append(f"{attacker} attacks {target} with {weapon}.")
-            result_lines.append(f"{target} is hit in the {hit_location}.")
+            result_lines.append(f"The weapon {damage_desc} into the {hit_location}.")
 
             # Check if target died
             if target_health <= 0:
@@ -197,7 +196,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 del combat_state["participants"][target]
 
                 # Check if combat should end (only one team remains)
-                remaining_teams = set(p.get("team", 1) for p in combat_state["participants"].values())
+                remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
                 if len(remaining_teams) <= 1:
                     # Sync remaining participants' health to NPC files if they exist
                     npcs_index = _npc_repo.get_npc_index(campaign_id)
@@ -290,7 +289,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         result_text = reason_messages.get(reason, f"{name} has left combat.")
 
         # Check if combat should end (only one team remains)
-        remaining_teams = set(p.get("team", 1) for p in combat_state["participants"].values())
+        remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
         if len(remaining_teams) <= 1:
             # Sync remaining participants' health to NPC files if they exist
             npcs_index = _npc_repo.get_npc_index(campaign_id)

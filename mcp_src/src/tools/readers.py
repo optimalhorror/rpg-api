@@ -7,7 +7,7 @@ from mcp.types import Tool, TextContent
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import CAMPAIGNS_DIR
+from utils import CAMPAIGNS_DIR, health_description
 from repository_json import (
     JsonCampaignRepository,
     JsonNPCRepository,
@@ -179,9 +179,13 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     if not npc_data:
         return [TextContent(type="text", text=f"Error: NPC not found: {npc_key}")]
 
+    # Narrative presentation (hide mechanics)
+    health = npc_data.get('health', 20)
+    max_health = npc_data.get('max_health', 20)
+    health_status = health_description(health, max_health)
+
     result = f"NPC: {npc_data.get('name')}\n"
-    result += f"Health: {npc_data.get('health')}/{npc_data.get('max_health')}\n"
-    result += f"Hit Chance: {npc_data.get('hit_chance', 50)}%\n"
+    result += f"Condition: {health_status}\n"
 
     weapons = npc_data.get("weapons", {})
     if weapons:
@@ -196,7 +200,21 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     if keywords:
         result += f"Keywords: {', '.join(keywords)}\n"
 
-    result += f"\nFull data:\n{json.dumps(npc_data, indent=2)}"
+    # Show inventory
+    inventory = npc_data.get("inventory", {})
+    if inventory:
+        result += f"\n--- Inventory ---\n"
+        result += f"Money: {inventory.get('money', 0)} gold\n"
+        items = inventory.get("items", {})
+        if items:
+            result += f"Items ({len(items)}):\n"
+            for item_name, item in items.items():
+                result += f"  • {item_name}"
+                if item.get("weapon"):
+                    result += f" [weapon, {item.get('damage', '?')} damage]"
+                result += f"\n    {item.get('description', 'No description')}\n"
+        else:
+            result += "Items: None\n"
 
     return [TextContent(type="text", text=result)]
 
@@ -236,15 +254,13 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
     if participants:
         result += "Participants:\n"
         for name, stats in participants.items():
-            health = stats.get("health")
-            max_health = stats.get("max_health")
+            health = stats.get("health", 20)
+            max_health = stats.get("max_health", 20)
             team = stats.get("team", "?")
-            hit_chance = stats.get("hit_chance", 50)
-            result += f"- {name} (Team {team}): {health}/{max_health} HP, {hit_chance}% hit chance\n"
+            health_status = health_description(health, max_health)
+            result += f"- {name} (Team {team}): {health_status}\n"
     else:
         result += "No participants in combat.\n"
-
-    result += f"\nFull combat data:\n{json.dumps(combat_data, indent=2)}"
 
     return [TextContent(type="text", text=result)]
 
