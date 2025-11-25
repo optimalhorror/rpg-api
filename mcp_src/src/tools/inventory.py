@@ -93,6 +93,17 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
             text=f"Error: {npc_name} already has an item named '{item_name}'"
         )]
 
+    # Validate container exists if specified
+    if container:
+        items = npc_data["inventory"]["items"]
+        if container not in items:
+            available_items = list(items.keys()) if items else []
+            items_list = ", ".join(available_items) if available_items else "none"
+            return [TextContent(
+                type="text",
+                text=f"Error: Container '{container}' not found in {npc_name}'s inventory. Available items: {items_list}"
+            )]
+
     # Create item
     item_data = {
         "description": description,
@@ -172,11 +183,22 @@ async def handle_remove_item(arguments: dict) -> list[TextContent]:
     # Remove item
     del npc_data["inventory"]["items"][item_name]
 
+    # Clean up orphaned container references - remove container field from items that referenced this item
+    items_updated = []
+    for name, item in npc_data["inventory"]["items"].items():
+        if item.get("container") == item_name:
+            del item["container"]
+            items_updated.append(name)
+
     npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+
+    result_text = f"Removed '{item_name}' from {npc_name}'s inventory. Reason: {reason}"
+    if items_updated:
+        result_text += f"\nAlso removed container reference from: {', '.join(items_updated)}"
 
     return [TextContent(
         type="text",
-        text=f"Removed '{item_name}' from {npc_name}'s inventory. Reason: {reason}"
+        text=result_text
     )]
 
 

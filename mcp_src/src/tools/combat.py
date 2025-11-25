@@ -2,22 +2,8 @@ import random
 
 from mcp.types import Tool, TextContent
 
-from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor
+from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor, threat_level_to_hit_chance
 from repos import npc_repo, bestiary_repo, combat_repo, campaign_repo
-
-
-def threat_level_to_hit_chance(threat_level: str) -> int:
-    """Convert threat level to hit chance percentage."""
-    threat_map = {
-        "none": 10,           # fly - needs lucky eye bite
-        "negligible": 25,     # dog - can hurt but not trained
-        "low": 35,            # wolf - natural hunter
-        "moderate": 50,       # bandit - trained fighter
-        "high": 65,           # mercenary - professional
-        "deadly": 80,         # dragon - apex predator
-        "certain_death": 95   # eldritch horror - reality-bending
-    }
-    return threat_map.get(threat_level, 50)  # Default to 50% if unknown
 
 
 def resolve_participant_name(campaign_id: str, name: str) -> tuple[str, bool]:
@@ -208,6 +194,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                     stats["team"] = resolved_name
 
                 combat_state["participants"][resolved_name] = stats
+
+        # Update attacker's team on each attack (allows team switching)
+        if team_name:
+            combat_state["participants"][attacker_resolved]["team"] = team_name
 
         # Simple combat: roll d20 for hit, using attacker's hit_chance
         attacker_data = combat_state["participants"][attacker_resolved]

@@ -42,15 +42,15 @@ def get_campaign_dir(campaign_id: str) -> Path:
 
 
 def roll_dice(formula: str) -> int:
-    """Roll dice from a formula like '1d6', '2d4+5', '20'."""
+    """Roll dice from a formula like '1d6', '2d4+5', '80+5d10', '20'."""
     formula = formula.lower().strip()
 
     # Just a number
     if formula.isdigit():
         return int(formula)
 
-    # Parse XdY+Z or XdY-Z or XdY
-    match = re.match(r'(\d+)?d(\d+)([+-]\d+)?', formula)
+    # Try to parse XdY+Z or XdY-Z or XdY (dice first, modifier second)
+    match = re.match(r'(\d+)?d(\d+)([+-]\d+)?$', formula)
     if match:
         count = int(match.group(1) or 1)
         sides = int(match.group(2))
@@ -59,8 +59,36 @@ def roll_dice(formula: str) -> int:
         total = sum(random.randint(1, sides) for _ in range(count))
         return total + modifier
 
+    # Try to parse Z+XdY or Z-XdY (modifier first, dice second)
+    match = re.match(r'(\d+)([+-])(\d+)?d(\d+)$', formula)
+    if match:
+        base = int(match.group(1))
+        operator = match.group(2)
+        count = int(match.group(3) or 1)
+        sides = int(match.group(4))
+
+        dice_total = sum(random.randint(1, sides) for _ in range(count))
+        if operator == '+':
+            return base + dice_total
+        else:  # operator == '-'
+            return base - dice_total
+
     # Fallback: just return 1
     return 1
+
+
+def threat_level_to_hit_chance(threat_level: str) -> int:
+    """Convert threat level to hit chance percentage."""
+    threat_map = {
+        "none": 10,           # fly, butterfly - mostly harmless
+        "negligible": 25,     # dog, cat - can bite but not dangerous
+        "low": 35,            # wolf, goblin - minor threat
+        "moderate": 50,       # bandit, orc - standard threat
+        "high": 65,           # mercenary, troll - serious threat
+        "deadly": 80,         # dragon, demon - very dangerous
+        "certain_death": 95   # eldritch horror - reality-bending
+    }
+    return threat_map.get(threat_level, 50)  # Default to 50% if unknown
 
 
 def health_description(health: int, max_health: int) -> str:

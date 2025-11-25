@@ -1,6 +1,6 @@
 from mcp.types import Tool, TextContent
 
-from utils import slugify, roll_dice, health_description, healing_descriptor
+from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance
 from repos import npc_repo
 
 
@@ -37,9 +37,10 @@ def get_create_npc_tool() -> Tool:
                     "type": "integer",
                     "description": "Optional: Maximum health points. Defaults to 20 if not specified."
                 },
-                "hit_chance": {
-                    "type": "integer",
-                    "description": "Optional: Hit chance percentage (1-100). Defaults to 50 if not specified."
+                "threat_level": {
+                    "type": "string",
+                    "enum": ["none", "negligible", "low", "moderate", "high", "deadly", "certain_death"],
+                    "description": "Optional: Combat threat level: none (10% hit), negligible (25%), low (35%), moderate (50%), high (65%), deadly (80%), certain_death (95%). Defaults to 'moderate' if not specified."
                 },
                 "weapons": {
                     "type": "object",
@@ -61,7 +62,8 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         arc = arguments["arc"]
         max_health = arguments.get("max_health", 20)
         health = arguments.get("health", max_health)  # Default to max_health
-        hit_chance = arguments.get("hit_chance", 50)  # Default to 50%
+        threat_level = arguments.get("threat_level", "moderate")  # Default to moderate (50% hit)
+        hit_chance = threat_level_to_hit_chance(threat_level)  # Convert to hit chance
         weapons = arguments.get("weapons", {})
 
         npc_slug = slugify(npc_name)
