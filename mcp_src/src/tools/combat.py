@@ -87,9 +87,9 @@ def get_attack_tool() -> Tool:
                     "type": "string",
                     "description": "Weapon being used (e.g., 'sword', 'fists', 'dagger')"
                 },
-                "allied_with": {
+                "team": {
                     "type": "string",
-                    "description": "Optional: Name of participant this attacker is allied with (e.g., 'Marcus', 'player'). Creates or joins that team. To fight solo, use your own name. Anyone can later join your team by using your name in allied_with."
+                    "description": "Optional: Team name for the attacker (e.g., 'team rocket', 'Team BOB', 'Marcus'). If not specified, attacker fights solo on a team named after themselves. Can be any team name - doesn't need to match an existing participant."
                 }
             },
             "required": ["campaign_id", "attacker", "target", "weapon"]
@@ -104,7 +104,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         attacker = arguments["attacker"]
         target = arguments["target"]
         weapon = arguments["weapon"]
-        allied_with = arguments.get("allied_with")
+        team_name = arguments.get("team")
 
         # Load or create combat state via repository
         combat_state = _combat_repo.get_combat_state(campaign_id)
@@ -117,17 +117,12 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 stats = get_participant_stats(campaign_id, participant)
 
                 # Assign team (string-based)
-                if participant == attacker and allied_with:
-                    # Allied with someone - join their team or create team with their name
-                    if allied_with in combat_state["participants"]:
-                        # Copy ally's team
-                        stats["team"] = combat_state["participants"][allied_with]["team"]
-                    else:
-                        # Ally doesn't exist yet, create team named after them
-                        stats["team"] = allied_with
+                if participant == attacker:
+                    # Attacker uses provided team name or defaults to their own name
+                    stats["team"] = team_name if team_name else attacker
                 else:
-                    # No ally specified - solo team named after participant
-                    stats["team"] = participant
+                    # Target always defaults to their own team
+                    stats["team"] = target
 
                 combat_state["participants"][participant] = stats
 
@@ -195,9 +190,12 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                         text=f"Error: {attacker} doesn't have '{weapon}'. Available weapons: {weapons_list}"
                     )]
 
-            # 3. Unknown participants (e.g., 'player', random names) - default to 1d6
+            # 3. Unknown participants - ERROR (must be NPC or bestiary entry)
             else:
-                damage_formula = "1d6"
+                return [TextContent(
+                    type="text",
+                    text=f"Error: {attacker} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                )]
 
             # Roll damage
             damage = roll_dice(damage_formula)
