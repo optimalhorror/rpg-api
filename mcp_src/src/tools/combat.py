@@ -142,62 +142,65 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         result_lines = []
 
         if hit:
-            # Get weapon damage: check inventory (NPCs) and bestiary (monsters)
+            # Check for team betrayal - attacking your own team
+            attacker_team = combat_state["participants"][attacker].get("team")
+            target_team = combat_state["participants"][target].get("team")
+            if attacker_team == target_team:
+                # Betrayal! Switch attacker to solo team
+                combat_state["participants"][attacker]["team"] = attacker
+                result_lines.append(f"{attacker} has betrayed their team!")
+
+            # Get weapon damage: check real-time inventory (NPCs) and bestiary (monsters)
             attacker_slug = slugify(attacker)
             damage_formula = None
+            is_improvised = False
 
-            # Check if attacker is an NPC or monster (must use defined weapons only)
+            # Check if attacker is an NPC or monster
             npc_data = _npc_repo.get_npc(campaign_id, attacker_slug)
             bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker)
-            is_defined_character = npc_data is not None or bestiary_entry is not None
 
-            # 1. Check NPC inventory for weapon
+            # 1. NPCs with inventory - check real-time inventory (not combat state)
             if npc_data and "inventory" in npc_data:
                 inventory = npc_data["inventory"]
                 items = inventory.get("items", {})
+
                 if weapon in items:
                     item = items[weapon]
+                    # Check if it's a proper weapon
                     if item.get("weapon") and item.get("damage"):
                         damage_formula = item["damage"]
+                    else:
+                        # Item exists but not a weapon - allow as improvised (1d4)
+                        damage_formula = "1d4"
+                        is_improvised = True
+                else:
+                    # Item doesn't exist in inventory
+                    available_items = list(items.keys()) if items else []
+                    items_list = ", ".join(available_items) if available_items else "none"
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: {attacker} doesn't have '{weapon}' in inventory. Available items: {items_list}"
+                    )]
 
-            # 2. Check bestiary for weapon (monsters)
-            if not damage_formula and bestiary_entry:
+            # 2. Bestiary monsters - use their defined weapons only
+            elif bestiary_entry:
                 bestiary_weapons = bestiary_entry.get("weapons", {})
                 if weapon in bestiary_weapons:
                     damage_formula = bestiary_weapons[weapon]
-
-            # 3. Validate weapon exists for NPCs/monsters, or allow freeform for others
-            if not damage_formula:
-                if is_defined_character:
-                    # NPCs and monsters must use their defined weapons
-                    available_weapons = []
-
-                    # Get inventory weapons (NPCs)
-                    if npc_data and "inventory" in npc_data:
-                        inventory_weapons = [
-                            name for name, item in npc_data["inventory"].get("items", {}).items()
-                            if item.get("weapon")
-                        ]
-                        available_weapons.extend(inventory_weapons)
-
-                    # Get bestiary weapons (monsters)
-                    if bestiary_entry:
-                        bestiary_weapons = list(bestiary_entry.get("weapons", {}).keys())
-                        available_weapons.extend(bestiary_weapons)
-
+                else:
+                    available_weapons = list(bestiary_weapons.keys()) if bestiary_weapons else []
                     weapons_list = ", ".join(available_weapons) if available_weapons else "none"
                     return [TextContent(
                         type="text",
                         text=f"Error: {attacker} doesn't have '{weapon}'. Available weapons: {weapons_list}"
                     )]
-                else:
-                    # Unknown participants default to 1d6 (e.g., 'player', random names)
-                    damage = random.randint(1, 6)
-                    damage_formula = "1d6"
 
-            # Roll damage if we have a formula
-            if damage_formula and 'damage' not in locals():
-                damage = roll_dice(damage_formula)
+            # 3. Unknown participants (e.g., 'player', random names) - default to 1d6
+            else:
+                damage_formula = "1d6"
+
+            # Roll damage
+            damage = roll_dice(damage_formula)
 
             hit_locations = ["head", "chest", "arm", "leg"]
             hit_location = random.choice(hit_locations)
@@ -218,8 +221,9 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
             # Narrative output (hide mechanics)
             damage_desc = damage_descriptor(damage, damage_formula)
-            result_lines.append(f"{attacker} attacks {target} with {weapon}.")
-            result_lines.append(f"The weapon {damage_desc} into the {hit_location}.")
+            weapon_desc = f"improvised weapon ({weapon})" if is_improvised else weapon
+            result_lines.append(f"{attacker} attacks {target} with {weapon_desc}.")
+            result_lines.append(f"The attack {damage_desc} into the {hit_location}.")
 
             # Check if target died
             if target_health <= 0:
@@ -259,6 +263,14 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             else:
                 result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
         else:
+            # Miss - but still check for team betrayal
+            attacker_team = combat_state["participants"][attacker].get("team")
+            target_team = combat_state["participants"][target].get("team")
+            if attacker_team == target_team:
+                # Betrayal! Switch attacker to solo team
+                combat_state["participants"][attacker]["team"] = attacker
+                result_lines.append(f"{attacker} has betrayed their team!")
+
             result_lines.append(f"{attacker} attacks {target} with {weapon}.")
             result_lines.append(f"{target} dodges the attack.")
 
