@@ -38,12 +38,6 @@ def get_begin_campaign_tool() -> Tool:
                 "player_health": {
                     "type": "integer",
                     "description": "Optional: Player's max health. Defaults to 20."
-                },
-                "player_weapons": {
-                    "type": "object",
-                    "description": "Optional: Player's starting weapons (e.g., {'sword': '1d6', 'fists': '1d4'}). Omit this field to default to fists.",
-                    "additionalProperties": {"type": "string"},
-                    "default": {}
                 }
             },
             "required": ["name", "player_name"]
@@ -57,11 +51,6 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     player_name = arguments.get("player_name")
     player_description = arguments.get("player_description", "The player character")
     player_health = arguments.get("player_health", 20)
-    player_weapons = arguments.get("player_weapons")
-
-    # Default to fists only if no weapons provided (None or empty dict)
-    if not player_weapons:
-        player_weapons = {"fists": "1d4"}
 
     if not campaign_name:
         return [TextContent(type="text", text="Error: Campaign name is required")]
@@ -105,7 +94,11 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         "arc": player_description,
         "health": player_health,
         "max_health": player_health,
-        "weapons": player_weapons
+        "hit_chance": 50,  # Default hit chance
+        "inventory": {
+            "money": 0,
+            "items": {}
+        }
     }
 
     # Save player NPC via repository (now campaign_id exists in list)
@@ -127,10 +120,9 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     # Save NPC index via repository
     _npc_repo.save_npc_index(campaign_id, npcs_index)
 
-    weapon_list = ", ".join([f"{w} ({d})" for w, d in player_weapons.items()])
     return [TextContent(
         type="text",
-        text=f"Campaign '{campaign_name}' created successfully!\n\nCampaign ID: {campaign_id}\nPlayer: {player_name} ({player_health} HP)\nWeapons: {weapon_list}\nDirectory: campaigns/{campaign_slug}/"
+        text=f"Campaign '{campaign_name}' created successfully!\n\nCampaign ID: {campaign_id}\nPlayer: {player_name} ({player_health} HP)\nDirectory: campaigns/{campaign_slug}/\n\nNote: Use add_item to give {player_name} weapons."
     )]
 
 
