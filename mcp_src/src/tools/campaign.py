@@ -132,3 +132,61 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         type="text",
         text=f"Campaign '{campaign_name}' created successfully!\n\nCampaign ID: {campaign_id}\nPlayer: {player_name} ({player_health} HP)\nWeapons: {weapon_list}\nDirectory: campaigns/{campaign_slug}/"
     )]
+
+
+def get_delete_campaign_tool() -> Tool:
+    """Return the delete_campaign tool definition."""
+    return Tool(
+        name="delete_campaign",
+        description="Delete a campaign completely. Removes all files from storage and campaign list. WARNING: This is permanent and cannot be undone!",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "campaign_id": {
+                    "type": "string",
+                    "description": "The campaign ID to delete"
+                }
+            },
+            "required": ["campaign_id"]
+        }
+    )
+
+
+async def handle_delete_campaign(arguments: dict) -> list[TextContent]:
+    """Handle the delete_campaign tool call."""
+    try:
+        campaign_id = arguments["campaign_id"]
+
+        # Load campaign list
+        campaign_list = load_campaign_list()
+        campaign_slug = campaign_list.get(campaign_id)
+
+        if not campaign_slug:
+            return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
+
+        # Get campaign name before deleting
+        campaign_dir = CAMPAIGNS_DIR / campaign_slug
+        campaign_file = campaign_dir / "campaign.json"
+
+        campaign_name = "Unknown"
+        if campaign_file.exists():
+            import json
+            campaign_data = json.loads(campaign_file.read_text())
+            campaign_name = campaign_data.get("name", "Unknown")
+
+        # Delete campaign directory and all contents
+        if campaign_dir.exists():
+            import shutil
+            shutil.rmtree(campaign_dir)
+
+        # Remove from campaign list
+        del campaign_list[campaign_id]
+        save_campaign_list(campaign_list)
+
+        return [TextContent(
+            type="text",
+            text=f"Campaign '{campaign_name}' (ID: {campaign_id}) has been permanently deleted.\n\nRemoved:\n- Directory: campaigns/{campaign_slug}/\n- All NPCs, bestiary entries, and combat data\n- Campaign list entry"
+        )]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error deleting campaign: {str(e)}")]
