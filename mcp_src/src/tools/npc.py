@@ -36,11 +36,6 @@ def get_create_npc_tool() -> Tool:
                     "type": "string",
                     "description": "The NPC's story/description that will be injected into context"
                 },
-                "weapons": {
-                    "type": "object",
-                    "description": "Optional: Map of weapon names to damage formulas (e.g., {'sword': '1d6', 'dagger': '1d4'})",
-                    "additionalProperties": {"type": "string"}
-                },
                 "health": {
                     "type": "integer",
                     "description": "Optional: Current health points. Defaults to max_health if not specified."
@@ -66,7 +61,6 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         npc_name = arguments["name"]
         keywords = arguments["keywords"]
         arc = arguments["arc"]
-        weapons = arguments.get("weapons", {})
         max_health = arguments.get("max_health", 20)
         health = arguments.get("health", max_health)  # Default to max_health
         hit_chance = arguments.get("hit_chance", 50)  # Default to 50%
@@ -80,7 +74,6 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             "arc": arc,
             "health": health,
             "max_health": max_health,
-            "weapons": weapons,
             "hit_chance": hit_chance,
             "inventory": {
                 "money": 0,

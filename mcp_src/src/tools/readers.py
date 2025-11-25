@@ -187,9 +187,18 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     result = f"NPC: {npc_data.get('name')}\n"
     result += f"Condition: {health_status}\n"
 
-    weapons = npc_data.get("weapons", {})
-    if weapons:
-        weapon_list = ", ".join([f"{w} ({d})" for w, d in weapons.items()])
+    # Get inventory weapons
+    inventory_weapons = []
+    if "inventory" in npc_data and "items" in npc_data["inventory"]:
+        items = npc_data["inventory"]["items"]
+        inventory_weapons = [
+            (name, item.get("damage", "?"))
+            for name, item in items.items()
+            if item.get("weapon")
+        ]
+
+    if inventory_weapons:
+        weapon_list = ", ".join([f"{w} ({d})" for w, d in inventory_weapons])
         result += f"Weapons: {weapon_list}\n"
 
     arc = npc_data.get("arc", "")

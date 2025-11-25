@@ -34,13 +34,12 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
     """Get participant stats: check NPC file first, then bestiary, then defaults."""
     participant_slug = slugify(name)
 
-    # 1. Check if existing NPC (load persisted health + weapons + hit_chance)
+    # 1. Check if existing NPC (load persisted health + hit_chance)
     npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
     if npc_data:
         return {
             "health": npc_data.get("health", 20),
             "max_health": npc_data.get("max_health", 20),
-            "weapons": npc_data.get("weapons", {}),
             "hit_chance": npc_data.get("hit_chance", 50)
         }
 
@@ -53,7 +52,6 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
         return {
             "health": max_health,
             "max_health": max_health,
-            "weapons": entry.get("weapons", {}),
             "hit_chance": hit_chance
         }
 
@@ -61,7 +59,6 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
     return {
         "health": 20,
         "max_health": 20,
-        "weapons": {},
         "hit_chance": 50
     }
 
@@ -145,8 +142,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         result_lines = []
 
         if hit:
-            # Get weapon damage: check inventory first, then base weapons, then validate
-            attacker_data = combat_state["participants"][attacker]
+            # Get weapon damage: check inventory (NPCs) and bestiary (monsters)
             attacker_slug = slugify(attacker)
             damage_formula = None
 
@@ -155,33 +151,39 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker)
             is_defined_character = npc_data is not None or bestiary_entry is not None
 
-            # 1. Check inventory for weapon (NPCs only)
+            # 1. Check NPC inventory for weapon
             if npc_data and "inventory" in npc_data:
                 inventory = npc_data["inventory"]
                 items = inventory.get("items", {})
-                # Look for matching weapon in inventory
                 if weapon in items:
                     item = items[weapon]
                     if item.get("weapon") and item.get("damage"):
                         damage_formula = item["damage"]
 
-            # 2. Fallback to base weapons (from NPC or bestiary)
-            if not damage_formula:
-                weapons = attacker_data.get("weapons", {})
-                if weapon in weapons:
-                    damage_formula = weapons[weapon]
+            # 2. Check bestiary for weapon (monsters)
+            if not damage_formula and bestiary_entry:
+                bestiary_weapons = bestiary_entry.get("weapons", {})
+                if weapon in bestiary_weapons:
+                    damage_formula = bestiary_weapons[weapon]
 
             # 3. Validate weapon exists for NPCs/monsters, or allow freeform for others
             if not damage_formula:
                 if is_defined_character:
                     # NPCs and monsters must use their defined weapons
-                    available_weapons = attacker_data.get("weapons", {}).keys()
+                    available_weapons = []
+
+                    # Get inventory weapons (NPCs)
                     if npc_data and "inventory" in npc_data:
                         inventory_weapons = [
                             name for name, item in npc_data["inventory"].get("items", {}).items()
                             if item.get("weapon")
                         ]
-                        available_weapons = list(available_weapons) + inventory_weapons
+                        available_weapons.extend(inventory_weapons)
+
+                    # Get bestiary weapons (monsters)
+                    if bestiary_entry:
+                        bestiary_weapons = list(bestiary_entry.get("weapons", {}).keys())
+                        available_weapons.extend(bestiary_weapons)
 
                     weapons_list = ", ".join(available_weapons) if available_weapons else "none"
                     return [TextContent(
@@ -312,7 +314,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         # Load combat state via repository
         combat_state = _combat_repo.get_combat_state(campaign_id)
         if not combat_state:
-            return [TextContent(type="text", text="No active combat found.")]
+            return [TextContent(type="text", text="There's no active combat.")]
 
         if name not in combat_state["participants"]:
             return [TextContent(type="text", text=f"{name} is not in combat.")]
