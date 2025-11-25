@@ -47,6 +47,11 @@ def get_create_npc_tool() -> Tool:
                 "hit_chance": {
                     "type": "integer",
                     "description": "Optional: Hit chance percentage (1-100). Defaults to 50 if not specified."
+                },
+                "weapons": {
+                    "type": "object",
+                    "description": "Optional: Starting weapons added to inventory. Format: {\"Sword\": \"1d8\", \"Dagger\": \"1d4\"}",
+                    "additionalProperties": {"type": "string"}
                 }
             },
             "required": ["campaign_id", "name", "keywords", "arc"]
@@ -64,6 +69,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         max_health = arguments.get("max_health", 20)
         health = arguments.get("health", max_health)  # Default to max_health
         hit_chance = arguments.get("hit_chance", 50)  # Default to 50%
+        weapons = arguments.get("weapons", {})
 
         npc_slug = slugify(npc_name)
 
@@ -81,6 +87,15 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             }
         }
 
+        # Add starting weapons to inventory
+        for weapon_name, damage in weapons.items():
+            npc_data["inventory"]["items"][weapon_name] = {
+                "description": f"A {weapon_name.lower()}",
+                "source": "starting equipment",
+                "weapon": True,
+                "damage": damage
+            }
+
         # Save NPC via repository
         _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
@@ -92,9 +107,16 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         }
         _npc_repo.save_npc_index(campaign_id, npcs_index)
 
+        # Build success message
+        message = f"NPC '{npc_name}' created successfully!\n\nFile: npc-{npc_slug}.json\nKeywords: {', '.join(keywords)}"
+
+        if weapons:
+            weapon_list = ", ".join([f"{name} ({damage})" for name, damage in weapons.items()])
+            message += f"\nWeapons: {weapon_list}"
+
         return [TextContent(
             type="text",
-            text=f"NPC '{npc_name}' created successfully!\n\nFile: npc-{npc_slug}.json\nKeywords: {', '.join(keywords)}"
+            text=message
         )]
 
     except Exception as e:
