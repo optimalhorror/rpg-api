@@ -92,14 +92,10 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     npc_repo.save_npc(campaign_id, player_slug, player_data)
 
     # Create npcs.json index with player
-    # Add both the player name and "user" as keys pointing to the same file
+    # Keywords like "user", "player", "you" are already in the player NPC's keywords array
     npcs_index = {
         player_slug: {
             "keywords": player_data["keywords"],
-            "file": f"npc-{player_slug}.json"
-        },
-        "user": {
-            "keywords": ["user", "player", "you"],
             "file": f"npc-{player_slug}.json"
         }
     }

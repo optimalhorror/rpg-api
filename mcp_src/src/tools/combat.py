@@ -112,7 +112,7 @@ def get_attack_tool() -> Tool:
     """Return the attack tool definition."""
     return Tool(
         name="attack",
-        description="Perform an attack action. Returns human-readable combat results including hit/miss, damage description, and health states. Use list_campaigns to get campaign_id.",
+        description="Perform an attack action. Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -130,14 +130,14 @@ def get_attack_tool() -> Tool:
                 },
                 "weapon": {
                     "type": "string",
-                    "description": "Weapon being used (e.g., 'sword', 'fists', 'dagger')"
+                    "description": "Optional: Weapon being used (e.g., 'sword', 'dagger'). If omitted, uses unarmed combat (fists, 1d4 damage)."
                 },
                 "team": {
                     "type": "string",
                     "description": "Optional: Team name for the attacker (e.g., 'guards', 'bandits', 'party'). If not specified, attacker fights solo on a team named after themselves. Can be any team name - doesn't need to match an existing participant."
                 }
             },
-            "required": ["campaign_id", "attacker", "target", "weapon"]
+            "required": ["campaign_id", "attacker", "target"]
         }
     )
 
@@ -148,8 +148,12 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         campaign_id = arguments["campaign_id"]
         attacker = arguments["attacker"]
         target = arguments["target"]
-        weapon = arguments["weapon"]
+        weapon = arguments.get("weapon")  # Optional - defaults to unarmed if not provided
         team_name = arguments.get("team")
+
+        # If no weapon specified, default to unarmed combat
+        if not weapon:
+            weapon = "unarmed"
 
         # Load or create combat state via repository
         combat_state = combat_repo.get_combat_state(campaign_id)
@@ -244,13 +248,20 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                         damage_formula = "1d4"
                         is_improvised = True
                 else:
-                    # Item doesn't exist in inventory
-                    available_items = list(items.keys()) if items else []
-                    items_list = ", ".join(available_items) if available_items else "none"
-                    return [TextContent(
-                        type="text",
-                        text=f"Error: {attacker_resolved} doesn't have '{weapon}' in inventory. Available items: {items_list}"
-                    )]
+                    # Check if unarmed attack (fists, punch, kick, etc.)
+                    unarmed_keywords = ["fists", "fist", "punch", "kick", "unarmed", "bare hands"]
+                    if weapon.lower() in unarmed_keywords:
+                        # Allow unarmed attacks with minimal damage
+                        damage_formula = "1d4"
+                        is_improvised = False  # Not improvised, just weak
+                    else:
+                        # Item doesn't exist in inventory
+                        available_items = list(items.keys()) if items else []
+                        items_list = ", ".join(available_items) if available_items else "none (try 'fists' for unarmed)"
+                        return [TextContent(
+                            type="text",
+                            text=f"Error: {attacker_resolved} doesn't have '{weapon}' in inventory. Available items: {items_list}"
+                        )]
 
             # 2. Bestiary monsters - use their defined weapons only
             elif bestiary_entry:
@@ -304,6 +315,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 is_player = target_resolved.lower() == player_name.lower()
 
                 # Delete NPC file for non-player deaths
+                target_slug = slugify(target_resolved)
+                target_npc_data = npc_repo.get_npc(campaign_id, target_slug)
                 if not is_player and target_npc_data:
                     npc_repo.delete_npc(campaign_id, target_slug)
 

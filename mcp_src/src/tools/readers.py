@@ -77,10 +77,11 @@ async def handle_get_campaign(arguments: dict) -> list[TextContent]:
     if not campaign_data:
         return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
 
+    player_info = campaign_data.get('player', {})
     result = f"Campaign: {campaign_data.get('name')}\n"
     result += f"ID: {campaign_data.get('id')}\n"
-    result += f"Player: {campaign_data.get('player', {}).get('name', 'Unknown')}\n"
-    result += f"\nFull data:\n{json.dumps(campaign_data, indent=2)}"
+    result += f"Player: {player_info.get('name', 'Unknown')}\n"
+    result += f"Player File: {player_info.get('file', 'N/A')}\n"
 
     return [TextContent(type="text", text=result)]
 
@@ -302,7 +303,5 @@ async def handle_get_bestiary(arguments: dict) -> list[TextContent]:
             result += f"  Description: {description}\n"
 
         result += "\n"
-
-    result += f"Full bestiary data:\n{json.dumps(bestiary_data, indent=2)}"
 
     return [TextContent(type="text", text=result)]
