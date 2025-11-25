@@ -90,6 +90,25 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
         }
 
 
+def handle_participant_death(campaign_id: str, participant_name: str) -> None:
+    """Handle participant death: delete NPC file unless it's the player character.
+
+    Args:
+        campaign_id: The campaign ID
+        participant_name: Name of the participant who died
+    """
+    # Check if dead participant is the player character
+    campaign_data = campaign_repo.get_campaign(campaign_id)
+    player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
+    is_player = participant_name.lower() == player_name.lower()
+
+    # Delete NPC file for non-player deaths
+    participant_slug = slugify(participant_name)
+    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
+    if not is_player and npc_data:
+        npc_repo.delete_npc(campaign_id, participant_slug)
+
+
 def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, str]:
     """Check if combat should end (only one team remains) and handle cleanup.
 
@@ -118,7 +137,7 @@ def get_attack_tool() -> Tool:
     """Return the attack tool definition."""
     return Tool(
         name="attack",
-        description="Perform an attack action. Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Use list_campaigns to get campaign_id.",
+        description="Perform an attack action between NPCs and/or monsters (bestiary entries). Participants can be NPCs (created with create_npc) or bestiary creatures (created with create_bestiary_entry). Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -128,11 +147,11 @@ def get_attack_tool() -> Tool:
                 },
                 "attacker": {
                     "type": "string",
-                    "description": "Who is attacking (e.g., 'player', NPC name, creature name)"
+                    "description": "Identifier or keyword for the attacker. Can be an NPC name/keyword (e.g., 'player', 'Steve', 'blacksmith') or a bestiary creature type (e.g., 'goblin', 'wolf', 'skeleton')."
                 },
                 "target": {
                     "type": "string",
-                    "description": "Who is being attacked"
+                    "description": "Identifier or keyword for the target being attacked. Can be an NPC name/keyword or a bestiary creature type."
                 },
                 "weapon": {
                     "type": "string",
@@ -319,16 +338,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             if target_health <= 0:
                 result_lines.append(f"{target_resolved} has been slain!")
 
-                # Check if dead target is the player character
-                campaign_data = campaign_repo.get_campaign(campaign_id)
-                player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-                is_player = target_resolved.lower() == player_name.lower()
-
-                # Delete NPC file for non-player deaths
-                target_slug = slugify(target_resolved)
-                target_npc_data = npc_repo.get_npc(campaign_id, target_slug)
-                if not is_player and target_npc_data:
-                    npc_repo.delete_npc(campaign_id, target_slug)
+                # Handle death: delete NPC file (unless player)
+                handle_participant_death(campaign_id, target_resolved)
 
                 # Remove dead target from combat
                 del combat_state["participants"][target_resolved]
@@ -368,7 +379,7 @@ def get_remove_from_combat_tool() -> Tool:
     """Return the remove_from_combat tool definition."""
     return Tool(
         name="remove_from_combat",
-        description="Remove a participant from combat (death, flee, surrender). If only one team remains, combat ends and the file is deleted.",
+        description="Remove an NPC or monster participant from combat (death, flee, surrender). If 'death' is chosen, the NPC file is deleted (unless it's the player). If only one team remains after removal, combat ends and the file is deleted.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -378,12 +389,12 @@ def get_remove_from_combat_tool() -> Tool:
                 },
                 "name": {
                     "type": "string",
-                    "description": "Name of the participant to remove"
+                    "description": "Name of the participant to remove. Must match an active combat participant (use get_combat_status to see current participants)."
                 },
                 "reason": {
                     "type": "string",
                     "enum": ["death", "flee", "surrender"],
-                    "description": "Why they're being removed: 'death' (killed), 'flee' (ran away), 'surrender' (gave up)"
+                    "description": "Why they're being removed: 'death' (killed, deletes NPC file), 'flee' (ran away), 'surrender' (gave up)"
                 }
             },
             "required": ["campaign_id", "name"]
@@ -406,7 +417,11 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         if name not in combat_state["participants"]:
             return [TextContent(type="text", text=f"{name} is not in combat.")]
 
-        # Remove participant
+        # If death, delete NPC file (but not player)
+        if reason == "death":
+            handle_participant_death(campaign_id, name)
+
+        # Remove participant from combat
         del combat_state["participants"][name]
 
         # Build result message
