@@ -57,6 +57,33 @@ def resolve_participant_name(campaign_id: str, name: str) -> tuple[str, bool]:
     return (name, False)
 
 
+def check_team_betrayal(combat_state: dict, attacker_resolved: str, target_resolved: str) -> bool:
+    """Check if attacker is attacking their own team. If so, switch them to solo team.
+
+    Returns True if betrayal occurred, False otherwise.
+    """
+    attacker_team = combat_state["participants"][attacker_resolved].get("team")
+    target_team = combat_state["participants"][target_resolved].get("team")
+
+    if attacker_team == target_team:
+        # Betrayal! Switch attacker to solo team
+        combat_state["participants"][attacker_resolved]["team"] = attacker_resolved
+        return True
+
+    return False
+
+
+def sync_npc_health(campaign_id: str, participant_name: str, health: int, max_health: int) -> None:
+    """Sync combat health back to NPC file if participant is an NPC."""
+    participant_slug = slugify(participant_name)
+    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+
+    if npc_data:
+        npc_data["health"] = health
+        npc_data["max_health"] = max_health
+        _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+
+
 def get_participant_stats(campaign_id: str, name: str) -> dict:
     """Get participant stats: check NPC file first, then bestiary.
 
@@ -200,11 +227,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
         if hit:
             # Check for team betrayal - attacking your own team
-            attacker_team = combat_state["participants"][attacker_resolved].get("team")
-            target_team = combat_state["participants"][target_resolved].get("team")
-            if attacker_team == target_team:
-                # Betrayal! Switch attacker to solo team
-                combat_state["participants"][attacker_resolved]["team"] = attacker_resolved
+            if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
             # Get weapon damage: check real-time inventory (NPCs) and bestiary (monsters)
@@ -273,11 +296,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             target_max = combat_state["participants"][target_resolved]["max_health"]
 
             # Sync health to NPC file if target is an NPC (real-time tracking)
-            target_slug = slugify(target_resolved)
-            target_npc_data = _npc_repo.get_npc(campaign_id, target_slug)
-            if target_npc_data:
-                target_npc_data["health"] = target_health
-                _npc_repo.save_npc(campaign_id, target_slug, target_npc_data)
+            sync_npc_health(campaign_id, target_resolved, target_health, target_max)
 
             # Narrative output (hide mechanics)
             damage_desc = damage_descriptor(damage, damage_formula)
@@ -305,18 +324,13 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
                 if len(remaining_teams) <= 1:
                     # Sync remaining participants' health to NPC files if they exist
-                    npcs_index = _npc_repo.get_npc_index(campaign_id)
-
                     for participant_name, participant_data in combat_state["participants"].items():
-                        participant_slug = slugify(participant_name)
-
-                        # Check if this participant is an NPC
-                        if participant_slug in npcs_index:
-                            npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
-                            if npc_data:
-                                npc_data["health"] = participant_data["health"]
-                                npc_data["max_health"] = participant_data["max_health"]
-                                _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+                        sync_npc_health(
+                            campaign_id,
+                            participant_name,
+                            participant_data["health"],
+                            participant_data["max_health"]
+                        )
 
                     _combat_repo.delete_combat_state(campaign_id)
                     result_lines.append("\nCombat has ended!")
@@ -324,11 +338,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
         else:
             # Miss - but still check for team betrayal
-            attacker_team = combat_state["participants"][attacker_resolved].get("team")
-            target_team = combat_state["participants"][target_resolved].get("team")
-            if attacker_team == target_team:
-                # Betrayal! Switch attacker to solo team
-                combat_state["participants"][attacker_resolved]["team"] = attacker_resolved
+            if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
             result_lines.append(f"{attacker_resolved} attacks {target_resolved} with {weapon}.")
@@ -406,18 +416,13 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
         if len(remaining_teams) <= 1:
             # Sync remaining participants' health to NPC files if they exist
-            npcs_index = _npc_repo.get_npc_index(campaign_id)
-
             for participant_name, participant_data in combat_state["participants"].items():
-                participant_slug = slugify(participant_name)
-
-                # Check if this participant is an NPC
-                if participant_slug in npcs_index:
-                    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
-                    if npc_data:
-                        npc_data["health"] = participant_data["health"]
-                        npc_data["max_health"] = participant_data["max_health"]
-                        _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+                sync_npc_health(
+                    campaign_id,
+                    participant_name,
+                    participant_data["health"],
+                    participant_data["max_health"]
+                )
 
             _combat_repo.delete_combat_state(campaign_id)
             result_text += "\nCombat has ended!"
