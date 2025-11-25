@@ -58,8 +58,18 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         # Load bestiary via repository
         bestiary = _bestiary_repo.get_bestiary(campaign_id)
 
-        # Add/update entry
-        bestiary[name.lower()] = {
+        # Check if entry already exists
+        entry_key = name.lower()
+        if entry_key in bestiary:
+            existing_entry = bestiary[entry_key]
+            weapon_list = ", ".join([f"{w} ({d})" for w, d in existing_entry.get("weapons", {}).items()])
+            return [TextContent(
+                type="text",
+                text=f"Error: Bestiary entry '{name}' already exists.\n\nExisting entry:\nThreat Level: {existing_entry.get('threat_level')}\nHP: {existing_entry.get('hp')}\nWeapons: {weapon_list}\n\nUse get_bestiary to view all entries."
+            )]
+
+        # Add entry
+        bestiary[entry_key] = {
             "threat_level": threat_level,
             "hp": hp,
             "weapons": weapons

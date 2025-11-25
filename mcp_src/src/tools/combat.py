@@ -30,6 +30,33 @@ def threat_level_to_hit_chance(threat_level: str) -> int:
     return threat_map.get(threat_level, 50)  # Default to 50% if unknown
 
 
+def resolve_participant_name(campaign_id: str, name: str) -> tuple[str, bool]:
+    """Resolve participant name using NPC keywords. Returns (full_name, is_valid)."""
+    # First check if exact slug match exists in NPCs
+    participant_slug = slugify(name)
+    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+    if npc_data:
+        return (npc_data["name"], True)
+
+    # Check NPC index for keyword matches
+    npcs_index = _npc_repo.get_npc_index(campaign_id)
+    for npc_slug, npc_info in npcs_index.items():
+        keywords = npc_info.get("keywords", [])
+        # Match if name matches any keyword (case-insensitive)
+        if name.lower() in [k.lower() for k in keywords]:
+            npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+            if npc_data:
+                return (npc_data["name"], True)
+
+    # Check bestiary for exact match
+    entry = _bestiary_repo.get_entry(campaign_id, name)
+    if entry:
+        return (name, True)
+
+    # Not found
+    return (name, False)
+
+
 def get_participant_stats(campaign_id: str, name: str) -> dict:
     """Get participant stats: check NPC file first, then bestiary, then defaults."""
     participant_slug = slugify(name)
@@ -111,23 +138,57 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         if not combat_state:
             combat_state = {"participants": {}}
 
-        # Initialize participants with team assignment
-        for participant in [attacker, target]:
-            if participant not in combat_state["participants"]:
-                stats = get_participant_stats(campaign_id, participant)
+        # Resolve participant names (check if already in combat first, then resolve via keywords)
+        attacker_resolved = None
+        target_resolved = None
+
+        # Check if attacker already in combat (use existing name)
+        for participant_name in combat_state.get("participants", {}).keys():
+            if slugify(participant_name) == slugify(attacker):
+                attacker_resolved = participant_name
+                break
+
+        # If not in combat, resolve via keywords/NPC/bestiary
+        if not attacker_resolved:
+            attacker_resolved, attacker_valid = resolve_participant_name(campaign_id, attacker)
+            if not attacker_valid:
+                return [TextContent(
+                    type="text",
+                    text=f"Error: {attacker} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                )]
+
+        # Check if target already in combat (use existing name)
+        for participant_name in combat_state.get("participants", {}).keys():
+            if slugify(participant_name) == slugify(target):
+                target_resolved = participant_name
+                break
+
+        # If not in combat, resolve via keywords/NPC/bestiary
+        if not target_resolved:
+            target_resolved, target_valid = resolve_participant_name(campaign_id, target)
+            if not target_valid:
+                return [TextContent(
+                    type="text",
+                    text=f"Error: {target} is not a valid target. Targets must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                )]
+
+        # Initialize participants with team assignment (using resolved names)
+        for participant, resolved_name in [(attacker, attacker_resolved), (target, target_resolved)]:
+            if resolved_name not in combat_state["participants"]:
+                stats = get_participant_stats(campaign_id, resolved_name)
 
                 # Assign team (string-based)
                 if participant == attacker:
-                    # Attacker uses provided team name or defaults to their own name
-                    stats["team"] = team_name if team_name else attacker
+                    # Attacker uses provided team name or defaults to their resolved name
+                    stats["team"] = team_name if team_name else resolved_name
                 else:
-                    # Target always defaults to their own team
-                    stats["team"] = target
+                    # Target always defaults to their own team (use resolved name)
+                    stats["team"] = resolved_name
 
-                combat_state["participants"][participant] = stats
+                combat_state["participants"][resolved_name] = stats
 
         # Simple combat: roll d20 for hit, using attacker's hit_chance
-        attacker_data = combat_state["participants"][attacker]
+        attacker_data = combat_state["participants"][attacker_resolved]
         hit_chance = attacker_data.get("hit_chance", 50)
         hit_roll = random.randint(1, 20)
         # Convert hit_chance percentage to d20 threshold (e.g., 50% = >= 11, 75% = >= 6)
@@ -138,21 +199,21 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
         if hit:
             # Check for team betrayal - attacking your own team
-            attacker_team = combat_state["participants"][attacker].get("team")
-            target_team = combat_state["participants"][target].get("team")
+            attacker_team = combat_state["participants"][attacker_resolved].get("team")
+            target_team = combat_state["participants"][target_resolved].get("team")
             if attacker_team == target_team:
                 # Betrayal! Switch attacker to solo team
-                combat_state["participants"][attacker]["team"] = attacker
-                result_lines.append(f"{attacker} has betrayed their team!")
+                combat_state["participants"][attacker_resolved]["team"] = attacker_resolved
+                result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
             # Get weapon damage: check real-time inventory (NPCs) and bestiary (monsters)
-            attacker_slug = slugify(attacker)
+            attacker_slug = slugify(attacker_resolved)
             damage_formula = None
             is_improvised = False
 
             # Check if attacker is an NPC or monster
             npc_data = _npc_repo.get_npc(campaign_id, attacker_slug)
-            bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker)
+            bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker_resolved)
 
             # 1. NPCs with inventory - check real-time inventory (not combat state)
             if npc_data and "inventory" in npc_data:
@@ -174,7 +235,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                     items_list = ", ".join(available_items) if available_items else "none"
                     return [TextContent(
                         type="text",
-                        text=f"Error: {attacker} doesn't have '{weapon}' in inventory. Available items: {items_list}"
+                        text=f"Error: {attacker_resolved} doesn't have '{weapon}' in inventory. Available items: {items_list}"
                     )]
 
             # 2. Bestiary monsters - use their defined weapons only
@@ -187,14 +248,14 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                     weapons_list = ", ".join(available_weapons) if available_weapons else "none"
                     return [TextContent(
                         type="text",
-                        text=f"Error: {attacker} doesn't have '{weapon}'. Available weapons: {weapons_list}"
+                        text=f"Error: {attacker_resolved} doesn't have '{weapon}'. Available weapons: {weapons_list}"
                     )]
 
             # 3. Unknown participants - ERROR (must be NPC or bestiary entry)
             else:
                 return [TextContent(
                     type="text",
-                    text=f"Error: {attacker} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                    text=f"Error: {attacker_resolved} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
                 )]
 
             # Roll damage
@@ -204,14 +265,14 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             hit_location = random.choice(hit_locations)
 
             # Apply damage
-            combat_state["participants"][target]["health"] -= damage
-            combat_state["participants"][target]["health"] = max(0, combat_state["participants"][target]["health"])
+            combat_state["participants"][target_resolved]["health"] -= damage
+            combat_state["participants"][target_resolved]["health"] = max(0, combat_state["participants"][target_resolved]["health"])
 
-            target_health = combat_state["participants"][target]["health"]
-            target_max = combat_state["participants"][target]["max_health"]
+            target_health = combat_state["participants"][target_resolved]["health"]
+            target_max = combat_state["participants"][target_resolved]["max_health"]
 
             # Sync health to NPC file if target is an NPC (real-time tracking)
-            target_slug = slugify(target)
+            target_slug = slugify(target_resolved)
             target_npc_data = _npc_repo.get_npc(campaign_id, target_slug)
             if target_npc_data:
                 target_npc_data["health"] = target_health
@@ -220,24 +281,24 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             # Narrative output (hide mechanics)
             damage_desc = damage_descriptor(damage, damage_formula)
             weapon_desc = f"improvised weapon ({weapon})" if is_improvised else weapon
-            result_lines.append(f"{attacker} attacks {target} with {weapon_desc}.")
+            result_lines.append(f"{attacker_resolved} attacks {target_resolved} with {weapon_desc}.")
             result_lines.append(f"The attack {damage_desc} into the {hit_location}.")
 
             # Check if target died
             if target_health <= 0:
-                result_lines.append(f"{target} has been slain!")
+                result_lines.append(f"{target_resolved} has been slain!")
 
                 # Check if dead target is the player character
                 campaign_data = _campaign_repo.get_campaign(campaign_id)
                 player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-                is_player = target.lower() == player_name.lower()
+                is_player = target_resolved.lower() == player_name.lower()
 
                 # Delete NPC file for non-player deaths
                 if not is_player and target_npc_data:
                     _npc_repo.delete_npc(campaign_id, target_slug)
 
                 # Remove dead target from combat
-                del combat_state["participants"][target]
+                del combat_state["participants"][target_resolved]
 
                 # Check if combat should end (only one team remains)
                 remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
@@ -259,24 +320,24 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                     _combat_repo.delete_combat_state(campaign_id)
                     result_lines.append("\nCombat has ended!")
             else:
-                result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
+                result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
         else:
             # Miss - but still check for team betrayal
-            attacker_team = combat_state["participants"][attacker].get("team")
-            target_team = combat_state["participants"][target].get("team")
+            attacker_team = combat_state["participants"][attacker_resolved].get("team")
+            target_team = combat_state["participants"][target_resolved].get("team")
             if attacker_team == target_team:
                 # Betrayal! Switch attacker to solo team
-                combat_state["participants"][attacker]["team"] = attacker
-                result_lines.append(f"{attacker} has betrayed their team!")
+                combat_state["participants"][attacker_resolved]["team"] = attacker_resolved
+                result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
-            result_lines.append(f"{attacker} attacks {target} with {weapon}.")
-            result_lines.append(f"{target} dodges the attack.")
+            result_lines.append(f"{attacker_resolved} attacks {target_resolved} with {weapon}.")
+            result_lines.append(f"{target_resolved} dodges the attack.")
 
             # Show target health even on miss
-            if target in combat_state["participants"]:
-                target_health = combat_state["participants"][target]["health"]
-                target_max = combat_state["participants"][target]["max_health"]
-                result_lines.append(f"{target} is {health_description(target_health, target_max)}.")
+            if target_resolved in combat_state["participants"]:
+                target_health = combat_state["participants"][target_resolved]["health"]
+                target_max = combat_state["participants"][target_resolved]["max_health"]
+                result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
 
         # Save combat state via repository
         _combat_repo.save_combat_state(campaign_id, combat_state)
