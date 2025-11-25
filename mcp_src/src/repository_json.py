@@ -75,6 +75,21 @@ class JsonNPCRepository(NPCRepository):
         npcs_index_file = campaign_dir / "npcs.json"
         npcs_index_file.write_text(json.dumps(index, indent=2))
 
+    def delete_npc(self, campaign_id: str, npc_slug: str) -> None:
+        """Delete NPC file and remove from index."""
+        campaign_dir = get_campaign_dir(campaign_id)
+        npc_file = campaign_dir / f"npc-{npc_slug}.json"
+
+        # Delete the NPC file if it exists
+        if npc_file.exists():
+            npc_file.unlink()
+
+        # Remove from index
+        npcs_index = self.get_npc_index(campaign_id)
+        if npc_slug in npcs_index:
+            del npcs_index[npc_slug]
+            self.save_npc_index(campaign_id, npcs_index)
+
 
 class JsonBestiaryRepository(BestiaryRepository):
     """JSON file-based bestiary persistence."""

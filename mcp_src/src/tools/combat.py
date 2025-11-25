@@ -7,12 +7,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor
-from repository_json import JsonNPCRepository, JsonBestiaryRepository, JsonCombatRepository
+from repository_json import JsonNPCRepository, JsonBestiaryRepository, JsonCombatRepository, JsonCampaignRepository
 
 # Global repository instances
 _npc_repo = JsonNPCRepository()
 _bestiary_repo = JsonBestiaryRepository()
 _combat_repo = JsonCombatRepository()
+_campaign_repo = JsonCampaignRepository()
 
 
 def threat_level_to_hit_chance(threat_level: str) -> int:
@@ -206,6 +207,13 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             target_health = combat_state["participants"][target]["health"]
             target_max = combat_state["participants"][target]["max_health"]
 
+            # Sync health to NPC file if target is an NPC (real-time tracking)
+            target_slug = slugify(target)
+            target_npc_data = _npc_repo.get_npc(campaign_id, target_slug)
+            if target_npc_data:
+                target_npc_data["health"] = target_health
+                _npc_repo.save_npc(campaign_id, target_slug, target_npc_data)
+
             # Narrative output (hide mechanics)
             damage_desc = damage_descriptor(damage, damage_formula)
             result_lines.append(f"{attacker} attacks {target} with {weapon}.")
@@ -214,6 +222,15 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             # Check if target died
             if target_health <= 0:
                 result_lines.append(f"{target} has been slain!")
+
+                # Check if dead target is the player character
+                campaign_data = _campaign_repo.get_campaign(campaign_id)
+                player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
+                is_player = target.lower() == player_name.lower()
+
+                # Delete NPC file for non-player deaths
+                if not is_player and target_npc_data:
+                    _npc_repo.delete_npc(campaign_id, target_slug)
 
                 # Remove dead target from combat
                 del combat_state["participants"][target]

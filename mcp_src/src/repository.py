@@ -51,6 +51,11 @@ class NPCRepository(ABC):
         """Save NPC index."""
         pass
 
+    @abstractmethod
+    def delete_npc(self, campaign_id: str, npc_slug: str) -> None:
+        """Delete NPC file and remove from index."""
+        pass
+
 
 class BestiaryRepository(ABC):
     """Abstract interface for bestiary data persistence."""
