@@ -34,10 +34,6 @@ def get_begin_campaign_tool() -> Tool:
                 "player_description": {
                     "type": "string",
                     "description": "Optional: Player character description (appearance, personality, backstory, etc.)"
-                },
-                "player_health": {
-                    "type": "integer",
-                    "description": "Optional: Player's max health. Defaults to 20."
                 }
             },
             "required": ["name", "player_name"]
@@ -50,7 +46,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     campaign_name = arguments.get("name")
     player_name = arguments.get("player_name")
     player_description = arguments.get("player_description", "The player character")
-    player_health = arguments.get("player_health", 20)
+    player_health = 25  # All players start with 25 HP
 
     if not campaign_name:
         return [TextContent(type="text", text="Error: Campaign name is required")]
