@@ -144,13 +144,17 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         result_lines = []
 
         if hit:
-            # Get weapon damage: check inventory first, then base weapons, then default
+            # Get weapon damage: check inventory first, then base weapons, then validate
             attacker_data = combat_state["participants"][attacker]
             attacker_slug = slugify(attacker)
             damage_formula = None
 
-            # 1. Check inventory for weapon (NPCs only)
+            # Check if attacker is an NPC or monster (must use defined weapons only)
             npc_data = _npc_repo.get_npc(campaign_id, attacker_slug)
+            bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker)
+            is_defined_character = npc_data is not None or bestiary_entry is not None
+
+            # 1. Check inventory for weapon (NPCs only)
             if npc_data and "inventory" in npc_data:
                 inventory = npc_data["inventory"]
                 items = inventory.get("items", {})
@@ -166,12 +170,31 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 if weapon in weapons:
                     damage_formula = weapons[weapon]
 
-            # 3. Roll damage or default to 1d6
-            if damage_formula:
+            # 3. Validate weapon exists for NPCs/monsters, or allow freeform for others
+            if not damage_formula:
+                if is_defined_character:
+                    # NPCs and monsters must use their defined weapons
+                    available_weapons = attacker_data.get("weapons", {}).keys()
+                    if npc_data and "inventory" in npc_data:
+                        inventory_weapons = [
+                            name for name, item in npc_data["inventory"].get("items", {}).items()
+                            if item.get("weapon")
+                        ]
+                        available_weapons = list(available_weapons) + inventory_weapons
+
+                    weapons_list = ", ".join(available_weapons) if available_weapons else "none"
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: {attacker} doesn't have '{weapon}'. Available weapons: {weapons_list}"
+                    )]
+                else:
+                    # Unknown participants default to 1d6 (e.g., 'player', random names)
+                    damage = random.randint(1, 6)
+                    damage_formula = "1d6"
+
+            # Roll damage if we have a formula
+            if damage_formula and 'damage' not in locals():
                 damage = roll_dice(damage_formula)
-            else:
-                damage = random.randint(1, 6)  # Default 1d6
-                damage_formula = "1d6"
 
             hit_locations = ["head", "chest", "arm", "leg"]
             hit_location = random.choice(hit_locations)
