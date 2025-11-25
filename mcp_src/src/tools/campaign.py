@@ -88,9 +88,12 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         }
     }
 
+    # IMPORTANT: Add to campaign list FIRST so repository can find the campaign
+    campaign_list = load_campaign_list()
+    campaign_list[campaign_id] = campaign_slug
+    save_campaign_list(campaign_list)
+
     # Save campaign data via repository
-    # Note: We still need to create the directory structure first
-    # since campaign_id doesn't exist in the campaign list yet
     campaign_file = campaign_dir / "campaign.json"
     import json
     campaign_file.write_text(json.dumps(campaign_data, indent=2))
@@ -105,7 +108,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         "weapons": player_weapons
     }
 
-    # Save player NPC via repository
+    # Save player NPC via repository (now campaign_id exists in list)
     _npc_repo.save_npc(campaign_id, player_slug, player_data)
 
     # Create npcs.json index with player
@@ -123,11 +126,6 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
 
     # Save NPC index via repository
     _npc_repo.save_npc_index(campaign_id, npcs_index)
-
-    # Update campaign list
-    campaign_list = load_campaign_list()
-    campaign_list[campaign_id] = campaign_slug
-    save_campaign_list(campaign_list)
 
     weapon_list = ", ".join([f"{w} ({d})" for w, d in player_weapons.items()])
     return [TextContent(
