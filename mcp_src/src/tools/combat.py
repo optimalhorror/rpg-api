@@ -91,22 +91,28 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
 
 
 def handle_participant_death(campaign_id: str, participant_name: str) -> None:
-    """Handle participant death: delete NPC file unless it's the player character.
+    """Handle participant death: set HP to 0 and delete NPC file (unless player).
 
     Args:
         campaign_id: The campaign ID
         participant_name: Name of the participant who died
     """
-    # Check if dead participant is the player character
-    campaign_data = campaign_repo.get_campaign(campaign_id)
-    player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-    is_player = participant_name.lower() == player_name.lower()
-
-    # Delete NPC file for non-player deaths
     participant_slug = slugify(participant_name)
     npc_data = npc_repo.get_npc(campaign_id, participant_slug)
-    if not is_player and npc_data:
-        npc_repo.delete_npc(campaign_id, participant_slug)
+
+    if npc_data:
+        # Set health to 0
+        npc_data["health"] = 0
+        npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+
+        # Check if dead participant is the player character
+        campaign_data = campaign_repo.get_campaign(campaign_id)
+        player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
+        is_player = participant_name.lower() == player_name.lower()
+
+        # Delete NPC file for non-player deaths
+        if not is_player:
+            npc_repo.delete_npc(campaign_id, participant_slug)
 
 
 def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, str]:
@@ -417,7 +423,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         if name not in combat_state["participants"]:
             return [TextContent(type="text", text=f"{name} is not in combat.")]
 
-        # If death, delete NPC file (but not player)
+        # If death, handle death (sets HP to 0, deletes NPC file if not player)
         if reason == "death":
             handle_participant_death(campaign_id, name)
 

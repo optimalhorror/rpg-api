@@ -93,6 +93,9 @@ def threat_level_to_hit_chance(threat_level: str) -> int:
 
 def health_description(health: int, max_health: int) -> str:
     """Convert health to human-readable description."""
+    if health <= 0:
+        return "dead"
+
     ratio = health / max_health
     if ratio >= 1.0:
         return "in perfect health"
