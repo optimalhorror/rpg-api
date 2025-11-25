@@ -1,13 +1,6 @@
 from mcp.types import Tool, TextContent
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from repository_json import JsonBestiaryRepository
-
-# Global repository instance (can be swapped for different implementations)
-_bestiary_repo = JsonBestiaryRepository()
+from repos import bestiary_repo
 
 
 def get_create_bestiary_entry_tool() -> Tool:
@@ -56,7 +49,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         weapons = arguments["weapons"]
 
         # Load bestiary via repository
-        bestiary = _bestiary_repo.get_bestiary(campaign_id)
+        bestiary = bestiary_repo.get_bestiary(campaign_id)
 
         # Check if entry already exists
         entry_key = name.lower()
@@ -76,7 +69,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         }
 
         # Save via repository
-        _bestiary_repo.save_bestiary(campaign_id, bestiary)
+        bestiary_repo.save_bestiary(campaign_id, bestiary)
 
         weapon_list = ", ".join([f"{w} ({d})" for w, d in weapons.items()])
         return [TextContent(

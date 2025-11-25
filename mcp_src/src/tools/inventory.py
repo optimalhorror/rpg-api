@@ -1,12 +1,12 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from mcp.types import Tool, TextContent
 from utils import roll_dice, slugify
-from repository_json import JsonNPCRepository
+from repos import npc_repo
 
-_npc_repo = JsonNPCRepository()
+
+def ensure_inventory(npc_data: dict) -> None:
+    """Ensure NPC has inventory initialized with default structure."""
+    if "inventory" not in npc_data:
+        npc_data["inventory"] = {"money": 0, "items": {}}
 
 
 def get_add_item_tool() -> Tool:
@@ -69,7 +69,7 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
     npc_slug = slugify(npc_name)
 
     # Load NPC
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -84,8 +84,7 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
         )]
 
     # Initialize inventory if needed
-    if "inventory" not in npc_data:
-        npc_data["inventory"] = {"money": 0, "items": {}}
+    ensure_inventory(npc_data)
 
     # Check if item already exists
     if item_name in npc_data["inventory"]["items"]:
@@ -109,7 +108,7 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
     npc_data["inventory"]["items"][item_name] = item_data
 
     # Save NPC
-    _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
     weapon_str = f" (weapon, {damage} damage)" if weapon else ""
     container_str = f" in {container}" if container else ""
@@ -157,7 +156,7 @@ async def handle_remove_item(arguments: dict) -> list[TextContent]:
 
     npc_slug = slugify(npc_name)
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -173,7 +172,7 @@ async def handle_remove_item(arguments: dict) -> list[TextContent]:
     # Remove item
     del npc_data["inventory"]["items"][item_name]
 
-    _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
     return [TextContent(
         type="text",
@@ -229,7 +228,7 @@ async def handle_update_item(arguments: dict) -> list[TextContent]:
 
     npc_slug = slugify(npc_name)
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -268,7 +267,7 @@ async def handle_update_item(arguments: dict) -> list[TextContent]:
             text=f"No updates provided for '{item_name}'"
         )]
 
-    _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
     return [TextContent(
         type="text",
@@ -303,7 +302,7 @@ async def handle_get_inventory(arguments: dict) -> list[TextContent]:
 
     npc_slug = slugify(npc_name)
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -377,7 +376,7 @@ async def handle_add_money(arguments: dict) -> list[TextContent]:
 
     npc_slug = slugify(npc_name)
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -385,13 +384,12 @@ async def handle_add_money(arguments: dict) -> list[TextContent]:
         )]
 
     # Initialize inventory if needed
-    if "inventory" not in npc_data:
-        npc_data["inventory"] = {"money": 0, "items": {}}
+    ensure_inventory(npc_data)
 
     old_money = npc_data["inventory"]["money"]
     npc_data["inventory"]["money"] = old_money + amount
 
-    _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
     source_str = f" ({source})" if source else ""
     return [TextContent(
@@ -437,7 +435,7 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
 
     npc_slug = slugify(npc_name)
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+    npc_data = npc_repo.get_npc(campaign_id, npc_slug)
     if not npc_data:
         return [TextContent(
             type="text",
@@ -445,8 +443,7 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
         )]
 
     # Initialize inventory if needed
-    if "inventory" not in npc_data:
-        npc_data["inventory"] = {"money": 0, "items": {}}
+    ensure_inventory(npc_data)
 
     old_money = npc_data["inventory"]["money"]
 
@@ -459,7 +456,7 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
 
     npc_data["inventory"]["money"] = old_money - amount
 
-    _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
     reason_str = f" ({reason})" if reason else ""
 

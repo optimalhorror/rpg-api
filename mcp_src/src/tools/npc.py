@@ -1,14 +1,7 @@
 from mcp.types import Tool, TextContent
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from utils import slugify, roll_dice, health_description, healing_descriptor
-from repository_json import JsonNPCRepository
-
-# Global repository instance
-_npc_repo = JsonNPCRepository()
+from repos import npc_repo
 
 
 def get_create_npc_tool() -> Tool:
@@ -74,7 +67,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         npc_slug = slugify(npc_name)
 
         # Check if NPC already exists
-        existing_npc = _npc_repo.get_npc(campaign_id, npc_slug)
+        existing_npc = npc_repo.get_npc(campaign_id, npc_slug)
         if existing_npc:
             return [TextContent(
                 type="text",
@@ -105,15 +98,15 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             }
 
         # Save NPC via repository
-        _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+        npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
         # Update NPC index
-        npcs_index = _npc_repo.get_npc_index(campaign_id)
+        npcs_index = npc_repo.get_npc_index(campaign_id)
         npcs_index[npc_slug] = {
             "keywords": keywords,
             "file": f"npc-{npc_slug}.json"
         }
-        _npc_repo.save_npc_index(campaign_id, npcs_index)
+        npc_repo.save_npc_index(campaign_id, npcs_index)
 
         # Build success message
         message = f"NPC '{npc_name}' created successfully!\n\nFile: npc-{npc_slug}.json\nKeywords: {', '.join(keywords)}"
@@ -171,7 +164,7 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
 
         npc_slug = slugify(npc_name)
 
-        npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+        npc_data = npc_repo.get_npc(campaign_id, npc_slug)
         if not npc_data:
             return [TextContent(
                 type="text",
@@ -188,7 +181,7 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         new_health = min(old_health + heal_amount, max_health)
         npc_data["health"] = new_health
 
-        _npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+        npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
         # Narrative output (hide mechanics)
         source_str = f" from {source}" if source else ""

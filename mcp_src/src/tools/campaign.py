@@ -4,17 +4,8 @@ from uuid import uuid4
 
 from mcp.types import Tool, TextContent
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from utils import CAMPAIGNS_DIR, slugify, load_campaign_list, save_campaign_list
-from repository_json import JsonCampaignRepository, JsonPlayerRepository, JsonNPCRepository
-
-# Global repository instances
-_campaign_repo = JsonCampaignRepository()
-_player_repo = JsonPlayerRepository()
-_npc_repo = JsonNPCRepository()
+from repos import campaign_repo, npc_repo
 
 
 def get_begin_campaign_tool() -> Tool:
@@ -81,7 +72,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     save_campaign_list(campaign_list)
 
     # Save campaign data via repository
-    _campaign_repo.save_campaign(campaign_id, campaign_data)
+    campaign_repo.save_campaign(campaign_id, campaign_data)
 
     # Create player NPC file
     player_data = {
@@ -98,7 +89,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     }
 
     # Save player NPC via repository (now campaign_id exists in list)
-    _npc_repo.save_npc(campaign_id, player_slug, player_data)
+    npc_repo.save_npc(campaign_id, player_slug, player_data)
 
     # Create npcs.json index with player
     # Add both the player name and "user" as keys pointing to the same file
@@ -114,7 +105,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     }
 
     # Save NPC index via repository
-    _npc_repo.save_npc_index(campaign_id, npcs_index)
+    npc_repo.save_npc_index(campaign_id, npcs_index)
 
     return [TextContent(
         type="text",
@@ -153,7 +144,7 @@ async def handle_delete_campaign(arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
 
         # Get campaign name before deleting
-        campaign_data = _campaign_repo.get_campaign(campaign_id)
+        campaign_data = campaign_repo.get_campaign(campaign_id)
         campaign_name = campaign_data.get("name", "Unknown") if campaign_data else "Unknown"
 
         # Delete campaign directory and all contents

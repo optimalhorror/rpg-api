@@ -1,25 +1,8 @@
 """Resource reader tools - expose MCP resources as callable tools."""
-import json
-import sys
-from pathlib import Path
-
 from mcp.types import Tool, TextContent
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from utils import CAMPAIGNS_DIR, health_description
-from repository_json import (
-    JsonCampaignRepository,
-    JsonNPCRepository,
-    JsonBestiaryRepository,
-    JsonCombatRepository,
-)
-
-# Global repository instances
-_campaign_repo = JsonCampaignRepository()
-_npc_repo = JsonNPCRepository()
-_bestiary_repo = JsonBestiaryRepository()
-_combat_repo = JsonCombatRepository()
+from utils import health_description
+from repos import campaign_repo, npc_repo, bestiary_repo, combat_repo
 
 
 def get_list_campaigns_tool() -> Tool:
@@ -37,25 +20,24 @@ def get_list_campaigns_tool() -> Tool:
 
 async def handle_list_campaigns(arguments: dict) -> list[TextContent]:
     """Handle the list_campaigns tool call."""
-    campaigns = []
+    # Use repository to get campaign list
+    campaign_list = campaign_repo.list_campaigns()
 
-    if CAMPAIGNS_DIR.exists():
-        for campaign_dir in CAMPAIGNS_DIR.iterdir():
-            if campaign_dir.is_dir():
-                campaign_file = campaign_dir / "campaign.json"
-                if campaign_file.exists():
-                    campaign_data = json.loads(campaign_file.read_text())
-                    campaigns.append({
-                        "id": campaign_data.get("id"),
-                        "name": campaign_data.get("name"),
-                        "slug": campaign_dir.name
-                    })
-
-    if not campaigns:
+    if not campaign_list:
         return [TextContent(
             type="text",
             text="No campaigns found. Create one with begin_campaign!"
         )]
+
+    campaigns = []
+    for campaign_id, campaign_slug in campaign_list.items():
+        campaign_data = campaign_repo.get_campaign(campaign_id)
+        if campaign_data:
+            campaigns.append({
+                "id": campaign_id,
+                "name": campaign_data.get("name", "Unknown"),
+                "slug": campaign_slug
+            })
 
     result = "Available campaigns:\n\n"
     for campaign in campaigns:
@@ -91,7 +73,7 @@ async def handle_get_campaign(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    campaign_data = _campaign_repo.get_campaign(campaign_id)
+    campaign_data = campaign_repo.get_campaign(campaign_id)
     if not campaign_data:
         return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
 
@@ -128,7 +110,7 @@ async def handle_list_npcs(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    npcs_data = _npc_repo.get_npc_index(campaign_id)
+    npcs_data = npc_repo.get_npc_index(campaign_id)
     if not npcs_data:
         return [TextContent(type="text", text="No NPCs found in this campaign.")]
 
@@ -175,7 +157,7 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     if not npc_key:
         return [TextContent(type="text", text="Error: npc_key is required")]
 
-    npc_data = _npc_repo.get_npc(campaign_id, npc_key.lower())
+    npc_data = npc_repo.get_npc(campaign_id, npc_key.lower())
     if not npc_data:
         return [TextContent(type="text", text=f"Error: NPC not found: {npc_key}")]
 
@@ -253,7 +235,7 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    combat_data = _combat_repo.get_combat_state(campaign_id)
+    combat_data = combat_repo.get_combat_state(campaign_id)
     if not combat_data:
         return [TextContent(type="text", text="No active combat.")]
 
@@ -299,7 +281,7 @@ async def handle_get_bestiary(arguments: dict) -> list[TextContent]:
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    bestiary_data = _bestiary_repo.get_bestiary(campaign_id)
+    bestiary_data = bestiary_repo.get_bestiary(campaign_id)
     if not bestiary_data:
         return [TextContent(type="text", text="No bestiary found. Create enemy templates with create_bestiary_entry.")]
 

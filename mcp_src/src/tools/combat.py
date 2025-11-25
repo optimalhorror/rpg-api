@@ -2,18 +2,8 @@ import random
 
 from mcp.types import Tool, TextContent
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor
-from repository_json import JsonNPCRepository, JsonBestiaryRepository, JsonCombatRepository, JsonCampaignRepository
-
-# Global repository instances
-_npc_repo = JsonNPCRepository()
-_bestiary_repo = JsonBestiaryRepository()
-_combat_repo = JsonCombatRepository()
-_campaign_repo = JsonCampaignRepository()
+from repos import npc_repo, bestiary_repo, combat_repo, campaign_repo
 
 
 def threat_level_to_hit_chance(threat_level: str) -> int:
@@ -34,22 +24,22 @@ def resolve_participant_name(campaign_id: str, name: str) -> tuple[str, bool]:
     """Resolve participant name using NPC keywords. Returns (full_name, is_valid)."""
     # First check if exact slug match exists in NPCs
     participant_slug = slugify(name)
-    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
     if npc_data:
         return (npc_data["name"], True)
 
     # Check NPC index for keyword matches
-    npcs_index = _npc_repo.get_npc_index(campaign_id)
+    npcs_index = npc_repo.get_npc_index(campaign_id)
     for npc_slug, npc_info in npcs_index.items():
         keywords = npc_info.get("keywords", [])
         # Match if name matches any keyword (case-insensitive)
         if name.lower() in [k.lower() for k in keywords]:
-            npc_data = _npc_repo.get_npc(campaign_id, npc_slug)
+            npc_data = npc_repo.get_npc(campaign_id, npc_slug)
             if npc_data:
                 return (npc_data["name"], True)
 
     # Check bestiary for exact match
-    entry = _bestiary_repo.get_entry(campaign_id, name)
+    entry = bestiary_repo.get_entry(campaign_id, name)
     if entry:
         return (name, True)
 
@@ -76,12 +66,12 @@ def check_team_betrayal(combat_state: dict, attacker_resolved: str, target_resol
 def sync_npc_health(campaign_id: str, participant_name: str, health: int, max_health: int) -> None:
     """Sync combat health back to NPC file if participant is an NPC."""
     participant_slug = slugify(participant_name)
-    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
 
     if npc_data:
         npc_data["health"] = health
         npc_data["max_health"] = max_health
-        _npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+        npc_repo.save_npc(campaign_id, participant_slug, npc_data)
 
 
 def get_participant_stats(campaign_id: str, name: str) -> dict:
@@ -93,7 +83,7 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
     participant_slug = slugify(name)
 
     # 1. Check if existing NPC (load persisted health + hit_chance)
-    npc_data = _npc_repo.get_npc(campaign_id, participant_slug)
+    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
     if npc_data:
         return {
             "health": npc_data.get("health", 20),
@@ -102,7 +92,7 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
         }
 
     # 2. Check bestiary for template (roll new stats + map threat to hit_chance)
-    entry = _bestiary_repo.get_entry(campaign_id, name)
+    entry = bestiary_repo.get_entry(campaign_id, name)
     if entry:
         max_health = roll_dice(entry["hp"])
         threat_level = entry.get("threat_level", "moderate")
@@ -162,7 +152,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         team_name = arguments.get("team")
 
         # Load or create combat state via repository
-        combat_state = _combat_repo.get_combat_state(campaign_id)
+        combat_state = combat_repo.get_combat_state(campaign_id)
         if not combat_state:
             combat_state = {"participants": {}}
 
@@ -236,8 +226,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             is_improvised = False
 
             # Check if attacker is an NPC or monster
-            npc_data = _npc_repo.get_npc(campaign_id, attacker_slug)
-            bestiary_entry = _bestiary_repo.get_entry(campaign_id, attacker_resolved)
+            npc_data = npc_repo.get_npc(campaign_id, attacker_slug)
+            bestiary_entry = bestiary_repo.get_entry(campaign_id, attacker_resolved)
 
             # 1. NPCs with inventory - check real-time inventory (not combat state)
             if npc_data and "inventory" in npc_data:
@@ -309,13 +299,13 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 result_lines.append(f"{target_resolved} has been slain!")
 
                 # Check if dead target is the player character
-                campaign_data = _campaign_repo.get_campaign(campaign_id)
+                campaign_data = campaign_repo.get_campaign(campaign_id)
                 player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
                 is_player = target_resolved.lower() == player_name.lower()
 
                 # Delete NPC file for non-player deaths
                 if not is_player and target_npc_data:
-                    _npc_repo.delete_npc(campaign_id, target_slug)
+                    npc_repo.delete_npc(campaign_id, target_slug)
 
                 # Remove dead target from combat
                 del combat_state["participants"][target_resolved]
@@ -332,7 +322,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                             participant_data["max_health"]
                         )
 
-                    _combat_repo.delete_combat_state(campaign_id)
+                    combat_repo.delete_combat_state(campaign_id)
                     result_lines.append("\nCombat has ended!")
             else:
                 result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
@@ -351,7 +341,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
 
         # Save combat state via repository
-        _combat_repo.save_combat_state(campaign_id, combat_state)
+        combat_repo.save_combat_state(campaign_id, combat_state)
 
         return [TextContent(type="text", text="\n".join(result_lines))]
 
@@ -394,7 +384,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         reason = arguments.get("reason", "death")  # Default to death if not specified
 
         # Load combat state via repository
-        combat_state = _combat_repo.get_combat_state(campaign_id)
+        combat_state = combat_repo.get_combat_state(campaign_id)
         if not combat_state:
             return [TextContent(type="text", text="There's no active combat.")]
 
@@ -424,10 +414,10 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
                     participant_data["max_health"]
                 )
 
-            _combat_repo.delete_combat_state(campaign_id)
+            combat_repo.delete_combat_state(campaign_id)
             result_text += "\nCombat has ended!"
         else:
-            _combat_repo.save_combat_state(campaign_id, combat_state)
+            combat_repo.save_combat_state(campaign_id, combat_state)
 
         return [TextContent(type="text", text=result_text)]
 

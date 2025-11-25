@@ -3,6 +3,7 @@ import json
 from mcp.types import Resource
 
 from utils import CAMPAIGNS_DIR
+from repos import campaign_repo
 
 
 async def list_resources() -> list[Resource]:
@@ -17,62 +18,61 @@ async def list_resources() -> list[Resource]:
     ]
 
     # Add campaign.json files as resources
-    if CAMPAIGNS_DIR.exists():
-        for campaign_dir in CAMPAIGNS_DIR.iterdir():
-            if campaign_dir.is_dir():
-                campaign_file = campaign_dir / "campaign.json"
-                if campaign_file.exists():
-                    campaign_data = json.loads(campaign_file.read_text())
-                    campaign_name = campaign_data.get("name", campaign_dir.name)
+    campaign_list = campaign_repo.list_campaigns()
+    for campaign_id, campaign_slug in campaign_list.items():
+        campaign_data = campaign_repo.get_campaign(campaign_id)
+        if campaign_data:
+            campaign_name = campaign_data.get("name", campaign_slug)
+            campaign_dir = CAMPAIGNS_DIR / campaign_slug
 
-                    # Add campaign.json file
-                    resources.append(Resource(
-                        uri=f"campaign://{campaign_dir.name}/campaign.json",
-                        name=f"{campaign_name}",
-                        description=f"Campaign data for {campaign_name}",
-                        mimeType="application/json"
-                    ))
+            # Add campaign.json file
+            resources.append(Resource(
+                uri=f"campaign://{campaign_slug}/campaign.json",
+                name=f"{campaign_name}",
+                description=f"Campaign data for {campaign_name}",
+                mimeType="application/json"
+            ))
 
-                    # Add combat-current.json if it exists (active combat state)
-                    combat_file = campaign_dir / "combat-current.json"
-                    if combat_file.exists():
-                        resources.append(Resource(
-                            uri=f"campaign://{campaign_dir.name}/combat-current.json",
-                            name=f"{campaign_name} - Active Combat",
-                            description=f"Current combat participants and their states in {campaign_name}",
-                            mimeType="application/json"
-                        ))
+            # Add combat-current.json if it exists (active combat state)
+            combat_file = campaign_dir / "combat-current.json"
+            if combat_file.exists():
+                resources.append(Resource(
+                    uri=f"campaign://{campaign_slug}/combat-current.json",
+                    name=f"{campaign_name} - Active Combat",
+                    description=f"Current combat participants and their states in {campaign_name}",
+                    mimeType="application/json"
+                ))
 
-                    # Add npcs.json if it exists (NPC index with keywords)
-                    npcs_index_file = campaign_dir / "npcs.json"
-                    if npcs_index_file.exists():
-                        resources.append(Resource(
-                            uri=f"campaign://{campaign_dir.name}/npcs.json",
-                            name=f"{campaign_name} - NPC Index",
-                            description=f"List of all NPCs with keywords in {campaign_name}",
-                            mimeType="application/json"
-                        ))
+            # Add npcs.json if it exists (NPC index with keywords)
+            npcs_index_file = campaign_dir / "npcs.json"
+            if npcs_index_file.exists():
+                resources.append(Resource(
+                    uri=f"campaign://{campaign_slug}/npcs.json",
+                    name=f"{campaign_name} - NPC Index",
+                    description=f"List of all NPCs with keywords in {campaign_name}",
+                    mimeType="application/json"
+                ))
 
-                    # Add bestiary.json if it exists (enemy templates)
-                    bestiary_file = campaign_dir / "bestiary.json"
-                    if bestiary_file.exists():
-                        resources.append(Resource(
-                            uri=f"campaign://{campaign_dir.name}/bestiary.json",
-                            name=f"{campaign_name} - Bestiary",
-                            description=f"Enemy templates with stats and weapons in {campaign_name}",
-                            mimeType="application/json"
-                        ))
+            # Add bestiary.json if it exists (enemy templates)
+            bestiary_file = campaign_dir / "bestiary.json"
+            if bestiary_file.exists():
+                resources.append(Resource(
+                    uri=f"campaign://{campaign_slug}/bestiary.json",
+                    name=f"{campaign_name} - Bestiary",
+                    description=f"Enemy templates with stats and weapons in {campaign_name}",
+                    mimeType="application/json"
+                ))
 
-                    # Add all individual NPC files
-                    for npc_file in campaign_dir.glob("npc-*.json"):
-                        npc_data = json.loads(npc_file.read_text())
-                        npc_name = npc_data.get("name", npc_file.stem.replace("npc-", ""))
-                        resources.append(Resource(
-                            uri=f"campaign://{campaign_dir.name}/{npc_file.name}",
-                            name=f"{campaign_name} - {npc_name}",
-                            description=f"Full stats and info for {npc_name}",
-                            mimeType="application/json"
-                        ))
+            # Add all individual NPC files
+            for npc_file in campaign_dir.glob("npc-*.json"):
+                npc_data = json.loads(npc_file.read_text())
+                npc_name = npc_data.get("name", npc_file.stem.replace("npc-", ""))
+                resources.append(Resource(
+                    uri=f"campaign://{campaign_slug}/{npc_file.name}",
+                    name=f"{campaign_name} - {npc_name}",
+                    description=f"Full stats and info for {npc_name}",
+                    mimeType="application/json"
+                ))
 
     return resources
 
@@ -84,19 +84,17 @@ async def read_resource(uri: str) -> str:
     uri = str(uri)
 
     if uri == "campaign://list":
-        # Return list of all campaigns
+        # Return list of all campaigns using repository
         campaigns = []
-        if CAMPAIGNS_DIR.exists():
-            for campaign_dir in CAMPAIGNS_DIR.iterdir():
-                if campaign_dir.is_dir():
-                    campaign_file = campaign_dir / "campaign.json"
-                    if campaign_file.exists():
-                        campaign_data = json.loads(campaign_file.read_text())
-                        campaigns.append({
-                            "id": campaign_data.get("id"),
-                            "name": campaign_data.get("name"),
-                            "slug": campaign_dir.name
-                        })
+        campaign_list = campaign_repo.list_campaigns()
+        for campaign_id, campaign_slug in campaign_list.items():
+            campaign_data = campaign_repo.get_campaign(campaign_id)
+            if campaign_data:
+                campaigns.append({
+                    "id": campaign_id,
+                    "name": campaign_data.get("name", "Unknown"),
+                    "slug": campaign_slug
+                })
         return json.dumps(campaigns, indent=2)
 
     # Parse campaign URIs: campaign://{slug}/ or campaign://{slug}/{file}
