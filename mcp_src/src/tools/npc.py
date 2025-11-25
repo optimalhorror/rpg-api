@@ -15,22 +15,22 @@ def get_create_npc_tool() -> Tool:
     """Return the create_npc tool definition."""
     return Tool(
         name="create_npc",
-        description="Create or update an NPC in the campaign. This adds them to the NPC index so they can be referenced later. To get the campaign_id, first read the campaign://list resource.",
+        description="Create an NPC in the campaign. This adds them to the NPC index so they can be referenced later. Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
                 "campaign_id": {
                     "type": "string",
-                    "description": "The campaign ID (get this by reading the campaign://list resource first)"
+                    "description": "The campaign ID (use list_campaigns to get this)"
                 },
                 "name": {
                     "type": "string",
-                    "description": "The NPC's name (e.g., 'Marcus', 'black-bearded-guard')"
+                    "description": "The NPC's full name"
                 },
                 "keywords": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Keywords to trigger this NPC's context (e.g., ['Marcus', 'guard', 'black beard'])"
+                    "description": "Keywords to match this NPC (e.g., ['Thorin', 'dwarf', 'blacksmith'] or ['Elara', 'elf', 'ranger'])"
                 },
                 "arc": {
                     "type": "string",
@@ -72,6 +72,14 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         weapons = arguments.get("weapons", {})
 
         npc_slug = slugify(npc_name)
+
+        # Check if NPC already exists
+        existing_npc = _npc_repo.get_npc(campaign_id, npc_slug)
+        if existing_npc:
+            return [TextContent(
+                type="text",
+                text=f"Error: NPC '{npc_name}' already exists.\n\nUse get_npc or list_npcs to view existing NPCs."
+            )]
 
         # Create NPC data
         npc_data = {

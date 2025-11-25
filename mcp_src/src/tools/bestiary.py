@@ -14,17 +14,17 @@ def get_create_bestiary_entry_tool() -> Tool:
     """Return the create_bestiary_entry tool definition."""
     return Tool(
         name="create_bestiary_entry",
-        description="Create or update a bestiary entry (enemy template) with stats and weapons. These templates are used as baselines when creating combat participants. To get the campaign_id, first read the campaign://list resource.",
+        description="Create a bestiary entry (enemy template) with stats and weapons. These templates are used as baselines when creating combat participants. Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
                 "campaign_id": {
                     "type": "string",
-                    "description": "The campaign ID (get this by reading the campaign://list resource first)"
+                    "description": "The campaign ID (use list_campaigns to get this)"
                 },
                 "name": {
                     "type": "string",
-                    "description": "Template name (e.g., 'guard', 'goblin', 'dragon')"
+                    "description": "Creature type name (e.g., 'goblin', 'wolf', 'skeleton')"
                 },
                 "threat_level": {
                     "type": "string",

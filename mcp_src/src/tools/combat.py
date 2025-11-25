@@ -58,7 +58,11 @@ def resolve_participant_name(campaign_id: str, name: str) -> tuple[str, bool]:
 
 
 def get_participant_stats(campaign_id: str, name: str) -> dict:
-    """Get participant stats: check NPC file first, then bestiary, then defaults."""
+    """Get participant stats: check NPC file first, then bestiary.
+
+    Note: Participants are validated before calling this function via resolve_participant_name(),
+    so this function should always find either NPC or bestiary data.
+    """
     participant_slug = slugify(name)
 
     # 1. Check if existing NPC (load persisted health + hit_chance)
@@ -82,29 +86,26 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
             "hit_chance": hit_chance
         }
 
-    # 3. Default stats
-    return {
-        "health": 20,
-        "max_health": 20,
-        "hit_chance": 50
-    }
+    # 3. This should never be reached due to validation in resolve_participant_name()
+    # If we get here, there's a bug in the validation logic
+    raise ValueError(f"Invalid participant: {name} - not found in NPCs or bestiary. This should have been caught by resolve_participant_name().")
 
 
 def get_attack_tool() -> Tool:
     """Return the attack tool definition."""
     return Tool(
         name="attack",
-        description="Perform an attack action. Returns human-readable combat results including hit/miss, damage description, and health states. To get the campaign_id, first read the campaign://list resource.",
+        description="Perform an attack action. Returns human-readable combat results including hit/miss, damage description, and health states. Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
                 "campaign_id": {
                     "type": "string",
-                    "description": "The campaign ID (get this by reading the campaign://list resource first)"
+                    "description": "The campaign ID (use list_campaigns to get this)"
                 },
                 "attacker": {
                     "type": "string",
-                    "description": "Who is attacking (e.g., 'player', 'Marcus')"
+                    "description": "Who is attacking (e.g., 'player', NPC name, creature name)"
                 },
                 "target": {
                     "type": "string",
@@ -116,7 +117,7 @@ def get_attack_tool() -> Tool:
                 },
                 "team": {
                     "type": "string",
-                    "description": "Optional: Team name for the attacker (e.g., 'team rocket', 'Team BOB', 'Marcus'). If not specified, attacker fights solo on a team named after themselves. Can be any team name - doesn't need to match an existing participant."
+                    "description": "Optional: Team name for the attacker (e.g., 'guards', 'bandits', 'party'). If not specified, attacker fights solo on a team named after themselves. Can be any team name - doesn't need to match an existing participant."
                 }
             },
             "required": ["campaign_id", "attacker", "target", "weapon"]
@@ -358,7 +359,7 @@ def get_remove_from_combat_tool() -> Tool:
             "properties": {
                 "campaign_id": {
                     "type": "string",
-                    "description": "The campaign ID (get this by reading the campaign://list resource first)"
+                    "description": "The campaign ID (use list_campaigns to get this)"
                 },
                 "name": {
                     "type": "string",

@@ -1,3 +1,5 @@
+import json
+import shutil
 from uuid import uuid4
 
 from mcp.types import Tool, TextContent
@@ -79,9 +81,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
     save_campaign_list(campaign_list)
 
     # Save campaign data via repository
-    campaign_file = campaign_dir / "campaign.json"
-    import json
-    campaign_file.write_text(json.dumps(campaign_data, indent=2))
+    _campaign_repo.save_campaign(campaign_id, campaign_data)
 
     # Create player NPC file
     player_data = {
@@ -153,18 +153,12 @@ async def handle_delete_campaign(arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
 
         # Get campaign name before deleting
-        campaign_dir = CAMPAIGNS_DIR / campaign_slug
-        campaign_file = campaign_dir / "campaign.json"
-
-        campaign_name = "Unknown"
-        if campaign_file.exists():
-            import json
-            campaign_data = json.loads(campaign_file.read_text())
-            campaign_name = campaign_data.get("name", "Unknown")
+        campaign_data = _campaign_repo.get_campaign(campaign_id)
+        campaign_name = campaign_data.get("name", "Unknown") if campaign_data else "Unknown"
 
         # Delete campaign directory and all contents
+        campaign_dir = CAMPAIGNS_DIR / campaign_slug
         if campaign_dir.exists():
-            import shutil
             shutil.rmtree(campaign_dir)
 
         # Remove from campaign list
