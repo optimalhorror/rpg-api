@@ -89,9 +89,29 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
             "hit_chance": hit_chance
         }
 
-    # 3. This should never be reached due to validation in resolve_participant_name()
-    # If we get here, there's a bug in the validation logic
-    raise ValueError(f"Invalid participant: {name} - not found in NPCs or bestiary. This should have been caught by resolve_participant_name().")
+
+def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, str]:
+    """Check if combat should end (only one team remains) and handle cleanup.
+
+    Returns:
+        (combat_ended, message): True if combat ended with message, False with empty string otherwise.
+    """
+    remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
+    if len(remaining_teams) <= 1:
+        # Sync remaining participants' health to NPC files if they exist
+        for participant_name, participant_data in combat_state["participants"].items():
+            sync_npc_health(
+                campaign_id,
+                participant_name,
+                participant_data["health"],
+                participant_data["max_health"]
+            )
+
+        combat_repo.delete_combat_state(campaign_id)
+        return True, "\nCombat has ended!"
+    else:
+        combat_repo.save_combat_state(campaign_id, combat_state)
+        return False, ""
 
 
 def get_attack_tool() -> Tool:
@@ -313,22 +333,14 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 # Remove dead target from combat
                 del combat_state["participants"][target_resolved]
 
-                # Check if combat should end (only one team remains)
-                remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
-                if len(remaining_teams) <= 1:
-                    # Sync remaining participants' health to NPC files if they exist
-                    for participant_name, participant_data in combat_state["participants"].items():
-                        sync_npc_health(
-                            campaign_id,
-                            participant_name,
-                            participant_data["health"],
-                            participant_data["max_health"]
-                        )
-
-                    combat_repo.delete_combat_state(campaign_id)
-                    result_lines.append("\nCombat has ended!")
+                # Check if combat should end and handle cleanup
+                combat_ended, end_msg = check_and_end_combat(campaign_id, combat_state)
+                if combat_ended:
+                    result_lines.append(end_msg)
             else:
                 result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
+                # Save combat state since combat continues
+                combat_repo.save_combat_state(campaign_id, combat_state)
         else:
             # Miss - but still check for team betrayal
             if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
@@ -343,8 +355,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 target_max = combat_state["participants"][target_resolved]["max_health"]
                 result_lines.append(f"{target_resolved} is {health_description(target_health, target_max)}.")
 
-        # Save combat state via repository
-        combat_repo.save_combat_state(campaign_id, combat_state)
+            # Save combat state since combat continues
+            combat_repo.save_combat_state(campaign_id, combat_state)
 
         return [TextContent(type="text", text="\n".join(result_lines))]
 
@@ -405,22 +417,10 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         }
         result_text = reason_messages.get(reason, f"{name} has left combat.")
 
-        # Check if combat should end (only one team remains)
-        remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
-        if len(remaining_teams) <= 1:
-            # Sync remaining participants' health to NPC files if they exist
-            for participant_name, participant_data in combat_state["participants"].items():
-                sync_npc_health(
-                    campaign_id,
-                    participant_name,
-                    participant_data["health"],
-                    participant_data["max_health"]
-                )
-
-            combat_repo.delete_combat_state(campaign_id)
-            result_text += "\nCombat has ended!"
-        else:
-            combat_repo.save_combat_state(campaign_id, combat_state)
+        # Check if combat should end and handle cleanup
+        combat_ended, end_msg = check_and_end_combat(campaign_id, combat_state)
+        if combat_ended:
+            result_text += end_msg
 
         return [TextContent(type="text", text=result_text)]
 

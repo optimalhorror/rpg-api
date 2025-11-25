@@ -1,7 +1,7 @@
 from mcp.types import Tool, TextContent
 
 from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance
-from repos import npc_repo
+from repos import npc_repo, combat_repo
 
 
 def get_create_npc_tool() -> Tool:
@@ -184,6 +184,17 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         npc_data["health"] = new_health
 
         npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+
+        # Sync health to combat state if NPC is in active combat
+        combat_state = combat_repo.get_combat_state(campaign_id)
+        if combat_state and "participants" in combat_state:
+            # Find NPC in combat (match by name, case-insensitive)
+            for participant_name in combat_state["participants"].keys():
+                if slugify(participant_name) == npc_slug:
+                    # Update combat health to match NPC file
+                    combat_state["participants"][participant_name]["health"] = new_health
+                    combat_repo.save_combat_state(campaign_id, combat_state)
+                    break
 
         # Narrative output (hide mechanics)
         source_str = f" from {source}" if source else ""
