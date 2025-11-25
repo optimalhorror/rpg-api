@@ -143,7 +143,7 @@ def get_attack_tool() -> Tool:
     """Return the attack tool definition."""
     return Tool(
         name="attack",
-        description="Perform an attack action between NPCs and/or monsters (bestiary entries). Participants can be NPCs (created with create_npc) or bestiary creatures (created with create_bestiary_entry). Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Use list_campaigns to get campaign_id.",
+        description="Perform an attack action between NPCs and/or monsters (bestiary entries). Participants can be NPCs (created with create_npc) or bestiary creatures (created with create_bestiary_entry). Supports spawning multiple instances of the same bestiary creature with custom names (e.g., 'black rat', 'cute rat' both using 'rat' template). Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Use list_campaigns to get campaign_id.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -153,15 +153,23 @@ def get_attack_tool() -> Tool:
                 },
                 "attacker": {
                     "type": "string",
-                    "description": "Identifier or keyword for the attacker. Can be an NPC name/keyword (e.g., 'player', 'Steve', 'blacksmith') or a bestiary creature type (e.g., 'goblin', 'wolf', 'skeleton')."
+                    "description": "Identifier or keyword for the attacker. Can be an NPC name/keyword (e.g., 'player', 'Steve'), a bestiary creature type (e.g., 'goblin'), or a custom name when using attacker_bestiary_template (e.g., 'black rat')."
                 },
                 "target": {
                     "type": "string",
-                    "description": "Identifier or keyword for the target being attacked. Can be an NPC name/keyword or a bestiary creature type."
+                    "description": "Identifier or keyword for the target being attacked. Can be an NPC name/keyword, a bestiary creature type, or a custom name when using target_bestiary_template."
                 },
                 "weapon": {
                     "type": "string",
                     "description": "Optional: Weapon being used (e.g., 'sword', 'dagger'). If omitted, uses unarmed combat (fists, 1d4 damage)."
+                },
+                "attacker_bestiary_template": {
+                    "type": "string",
+                    "description": "Optional: Bestiary template to use for attacker stats. Allows spawning multiple instances with custom names (e.g., attacker='black rat', attacker_bestiary_template='rat'). If not provided, uses standard name resolution."
+                },
+                "target_bestiary_template": {
+                    "type": "string",
+                    "description": "Optional: Bestiary template to use for target stats. Allows spawning multiple instances with custom names (e.g., target='cute rat', target_bestiary_template='rat'). If not provided, uses standard name resolution."
                 },
                 "team": {
                     "type": "string",
@@ -181,6 +189,8 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         target = arguments["target"]
         weapon = arguments.get("weapon")  # Optional - defaults to unarmed if not provided
         team_name = arguments.get("team")
+        attacker_bestiary_template = arguments.get("attacker_bestiary_template")
+        target_bestiary_template = arguments.get("target_bestiary_template")
 
         # If no weapon specified, default to unarmed combat
         if not weapon:
@@ -201,14 +211,26 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 attacker_resolved = participant_name
                 break
 
-        # If not in combat, resolve via keywords/NPC/bestiary
+        # If not in combat, resolve attacker
         if not attacker_resolved:
-            attacker_resolved, attacker_valid = resolve_participant_name(campaign_id, attacker)
-            if not attacker_valid:
-                return [TextContent(
-                    type="text",
-                    text=f"Error: {attacker} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
-                )]
+            if attacker_bestiary_template:
+                # Using custom name with bestiary template
+                # Verify template exists
+                entry = bestiary_repo.get_entry(campaign_id, attacker_bestiary_template)
+                if not entry:
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: Bestiary template '{attacker_bestiary_template}' not found. Use create_bestiary_entry first."
+                    )]
+                attacker_resolved = attacker  # Use custom name
+            else:
+                # Standard resolution (NPC keyword or bestiary)
+                attacker_resolved, attacker_valid = resolve_participant_name(campaign_id, attacker)
+                if not attacker_valid:
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: {attacker} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                    )]
 
         # Check if target already in combat (use existing name)
         for participant_name in combat_state.get("participants", {}).keys():
@@ -216,19 +238,38 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 target_resolved = participant_name
                 break
 
-        # If not in combat, resolve via keywords/NPC/bestiary
+        # If not in combat, resolve target
         if not target_resolved:
-            target_resolved, target_valid = resolve_participant_name(campaign_id, target)
-            if not target_valid:
-                return [TextContent(
-                    type="text",
-                    text=f"Error: {target} is not a valid target. Targets must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
-                )]
+            if target_bestiary_template:
+                # Using custom name with bestiary template
+                # Verify template exists
+                entry = bestiary_repo.get_entry(campaign_id, target_bestiary_template)
+                if not entry:
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: Bestiary template '{target_bestiary_template}' not found. Use create_bestiary_entry first."
+                    )]
+                target_resolved = target  # Use custom name
+            else:
+                # Standard resolution (NPC keyword or bestiary)
+                target_resolved, target_valid = resolve_participant_name(campaign_id, target)
+                if not target_valid:
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: {target} is not a valid target. Targets must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
+                    )]
 
         # Initialize participants with team assignment (using resolved names)
-        for participant, resolved_name in [(attacker, attacker_resolved), (target, target_resolved)]:
+        for participant, resolved_name, bestiary_template in [
+            (attacker, attacker_resolved, attacker_bestiary_template),
+            (target, target_resolved, target_bestiary_template)
+        ]:
             if resolved_name not in combat_state["participants"]:
-                stats = get_participant_stats(campaign_id, resolved_name)
+                # Get stats from bestiary template if provided, otherwise use standard resolution
+                if bestiary_template:
+                    stats = get_participant_stats(campaign_id, bestiary_template)
+                else:
+                    stats = get_participant_stats(campaign_id, resolved_name)
 
                 # Assign team (string-based)
                 if participant == attacker:
