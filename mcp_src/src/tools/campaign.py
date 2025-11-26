@@ -18,11 +18,11 @@ def get_begin_campaign_tool() -> Tool:
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "The name of the campaign (e.g., 'The Lost Kingdom')"
+                    "description": "The name of the campaign"
                 },
                 "player_name": {
                     "type": "string",
-                    "description": "The player character's name (e.g., 'Aragorn', 'user')"
+                    "description": "The player character's name"
                 },
                 "player_description": {
                     "type": "string",

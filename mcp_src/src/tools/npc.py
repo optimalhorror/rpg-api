@@ -23,7 +23,7 @@ def get_create_npc_tool() -> Tool:
                 "keywords": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Keywords to match this NPC (e.g., ['Thorin', 'dwarf', 'blacksmith'] or ['Elara', 'elf', 'ranger'])"
+                    "description": "Keywords to match this NPC (name variations, role, race, etc.)"
                 },
                 "arc": {
                     "type": "string",
@@ -130,7 +130,7 @@ def get_heal_npc_tool() -> Tool:
     """Return the heal_npc tool definition."""
     return Tool(
         name="heal_npc",
-        description="Heal an NPC by rolling healing dice (e.g., '1d4', '2d6'). Accepts NPC name or keyword. Healing comes from items, rest, magic, etc. Cannot exceed max_health.",
+        description="Heal an NPC by rolling healing dice. Accepts NPC name or keyword. Healing comes from items, rest, magic, etc. Cannot exceed max_health.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -140,15 +140,15 @@ def get_heal_npc_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "Name or keyword of the NPC to heal (e.g., 'Steve', 'player', 'blacksmith')"
+                    "description": "Name or keyword of the NPC to heal"
                 },
                 "heal_dice": {
                     "type": "string",
-                    "description": "Healing dice formula (e.g., '1d4', '1d6', '2d8+2')"
+                    "description": "Healing dice formula using standard notation (XdY+Z)"
                 },
                 "source": {
                     "type": "string",
-                    "description": "Optional: Source of healing (e.g., 'potion', 'long rest', 'cure wounds spell')"
+                    "description": "Optional: Source of healing"
                 }
             },
             "required": ["campaign_id", "npc_name", "heal_dice"]

@@ -22,7 +22,7 @@ def get_add_item_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player', 'blacksmith')",
+                    "description": "NPC name or keyword",
                 },
                 "item_name": {
                     "type": "string",
@@ -34,7 +34,7 @@ def get_add_item_tool() -> Tool:
                 },
                 "source": {
                     "type": "string",
-                    "description": "Where the item came from (e.g., 'looted from goblin', 'bought at market')",
+                    "description": "Where the item came from",
                 },
                 "weapon": {
                     "type": "boolean",
@@ -43,11 +43,11 @@ def get_add_item_tool() -> Tool:
                 },
                 "damage": {
                     "type": "string",
-                    "description": "Damage dice for weapon (e.g., '1d8', '2d6'). Required if weapon=true.",
+                    "description": "Damage dice using standard notation (XdY). Required if weapon=true.",
                 },
                 "container": {
                     "type": "string",
-                    "description": "Optional: Name of container item this is stored in (e.g., 'backpack')",
+                    "description": "Optional: Name of container item this is stored in",
                 },
             },
             "required": ["campaign_id", "npc_name", "item_name", "description", "source"],
@@ -130,7 +130,7 @@ def get_remove_item_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player')",
+                    "description": "NPC name or keyword",
                 },
                 "item_name": {
                     "type": "string",
@@ -138,7 +138,7 @@ def get_remove_item_tool() -> Tool:
                 },
                 "reason": {
                     "type": "string",
-                    "description": "Optional: Why the item is being removed (e.g., 'ate the bread', 'threw away', 'destroyed in combat')",
+                    "description": "Optional: Why the item is being removed",
                 },
             },
             "required": ["campaign_id", "npc_name", "item_name"],
@@ -196,7 +196,7 @@ def get_update_item_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player')",
+                    "description": "NPC name or keyword",
                 },
                 "item_name": {
                     "type": "string",
@@ -285,7 +285,7 @@ def get_get_inventory_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player')",
+                    "description": "NPC name or keyword",
                 },
             },
             "required": ["campaign_id", "npc_name"],
@@ -346,15 +346,11 @@ def get_add_money_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player')",
+                    "description": "NPC name or keyword",
                 },
                 "amount": {
                     "type": "integer",
                     "description": "Amount of money to add (in gold)",
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Optional: Where the money came from (e.g., 'looted from chest', 'quest reward')",
                 },
             },
             "required": ["campaign_id", "npc_name", "amount"],
@@ -366,7 +362,6 @@ async def handle_add_money(arguments: dict) -> list[TextContent]:
     campaign_id = arguments["campaign_id"]
     npc_name = arguments["npc_name"]
     amount = arguments["amount"]
-    source = arguments.get("source", "")
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
@@ -382,10 +377,9 @@ async def handle_add_money(arguments: dict) -> list[TextContent]:
 
     npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
-    source_str = f" ({source})" if source else ""
     return [TextContent(
         type="text",
-        text=f"Added {amount} gold to {resolved_name}'s inventory{source_str}.\nNew balance: {npc_data['inventory']['money']} gold"
+        text=f"Added {amount} gold to {resolved_name}'s inventory.\nNew balance: {npc_data['inventory']['money']} gold"
     )]
 
 
@@ -402,15 +396,11 @@ def get_remove_money_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player')",
+                    "description": "NPC name or keyword",
                 },
                 "amount": {
                     "type": "integer",
                     "description": "Amount of money to remove (in gold)",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Optional: Why money is being removed (e.g., 'bought sword', 'paid for room')",
                 },
             },
             "required": ["campaign_id", "npc_name", "amount"],
@@ -422,7 +412,6 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
     campaign_id = arguments["campaign_id"]
     npc_name = arguments["npc_name"]
     amount = arguments["amount"]
-    reason = arguments.get("reason", "")
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
@@ -446,9 +435,7 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
 
     npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
-    reason_str = f" ({reason})" if reason else ""
-
     return [TextContent(
         type="text",
-        text=f"Removed {amount} gold from {resolved_name}'s inventory{reason_str}.\nNew balance: {npc_data['inventory']['money']} gold"
+        text=f"Removed {amount} gold from {resolved_name}'s inventory.\nNew balance: {npc_data['inventory']['money']} gold"
     )]

@@ -129,7 +129,7 @@ def get_get_npc_tool() -> Tool:
     """Return the get_npc tool definition."""
     return Tool(
         name="get_npc",
-        description="Get full NPC details including stats, health, weapons, and description. Accepts NPC name or keyword (e.g., 'Steve', 'player', 'blacksmith').",
+        description="Get full NPC details including stats, health, weapons, and description. Accepts NPC name or keyword.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -139,7 +139,7 @@ def get_get_npc_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "NPC name or keyword (e.g., 'Steve', 'player', 'blacksmith')"
+                    "description": "NPC name or keyword"
                 }
             },
             "required": ["campaign_id", "npc_name"]

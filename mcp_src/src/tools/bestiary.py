@@ -18,7 +18,7 @@ def get_create_bestiary_entry_tool() -> Tool:
                 },
                 "name": {
                     "type": "string",
-                    "description": "Creature type name (e.g., 'goblin', 'wolf', 'skeleton')"
+                    "description": "Creature type name"
                 },
                 "threat_level": {
                     "type": "string",
@@ -27,11 +27,11 @@ def get_create_bestiary_entry_tool() -> Tool:
                 },
                 "hp": {
                     "type": "string",
-                    "description": "HP formula in dice notation (e.g., '15+1d6', '20', '10+2d4')"
+                    "description": "HP formula using standard dice notation (XdY+Z)"
                 },
                 "weapons": {
                     "type": "object",
-                    "description": "Map of weapon names to damage formulas (e.g., {'sword': '1d6', 'dagger': '1d4'})",
+                    "description": "REQUIRED: Map of attack names to damage formulas. Format: {\"attack_name\": \"XdY\"}",
                     "additionalProperties": {"type": "string"}
                 }
             },

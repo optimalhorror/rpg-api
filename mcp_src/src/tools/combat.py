@@ -231,7 +231,7 @@ def get_spawn_enemy_tool() -> Tool:
     """Return the spawn_enemy tool definition."""
     return Tool(
         name="spawn_enemy",
-        description="Spawn a combat enemy from a bestiary template with a custom name. Use this to create multiple instances of the same creature type (e.g., 'black rat', 'white rat' from 'rat' template). Spawned enemies exist only in combat and are removed when combat ends or they die.",
+        description="Spawn a combat enemy from a bestiary template with a custom name. Use this to create multiple instances of the same creature type. Spawned enemies exist only in combat and are removed when combat ends or they die.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -241,15 +241,15 @@ def get_spawn_enemy_tool() -> Tool:
                 },
                 "name": {
                     "type": "string",
-                    "description": "Custom name for this enemy instance (e.g., 'black rat', 'goblin chief', 'skeleton #1')"
+                    "description": "Custom name for this enemy instance"
                 },
                 "bestiary_template": {
                     "type": "string",
-                    "description": "Bestiary entry to use as template for stats (e.g., 'rat', 'goblin', 'skeleton')"
+                    "description": "Bestiary entry to use as template for stats"
                 },
                 "team": {
                     "type": "string",
-                    "description": "Optional: Team name for this enemy (e.g., 'rats', 'goblins'). Enemies on the same team won't fight each other. Defaults to enemy's name."
+                    "description": "Optional: Team name for this enemy. Enemies on the same team won't fight each other. Defaults to enemy's name."
                 }
             },
             "required": ["campaign_id", "name", "bestiary_template"]
@@ -322,19 +322,19 @@ def get_attack_tool() -> Tool:
                 },
                 "attacker": {
                     "type": "string",
-                    "description": "Attacker name. Can be an NPC name/keyword (e.g., 'player', 'Steve'), a bestiary creature type (e.g., 'goblin'), or a spawned enemy name (e.g., 'black rat')."
+                    "description": "Attacker name. Can be an NPC name/keyword or a spawned enemy name."
                 },
                 "target": {
                     "type": "string",
-                    "description": "Target name. Can be an NPC name/keyword, a bestiary creature type, or a spawned enemy name."
+                    "description": "Target name. Can be an NPC name/keyword or a spawned enemy name."
                 },
                 "weapon": {
                     "type": "string",
-                    "description": "Optional: Weapon being used (e.g., 'sword', 'dagger'). If omitted, uses unarmed combat (fists, 1d4 damage)."
+                    "description": "Optional: Weapon name from attacker's inventory or bestiary. If omitted, uses unarmed combat (1d4 damage)."
                 },
                 "team": {
                     "type": "string",
-                    "description": "Optional: Team name for the attacker (e.g., 'guards', 'bandits', 'party'). If not specified, attacker fights solo on a team named after themselves."
+                    "description": "Optional: Team name for the attacker. If not specified, attacker fights solo."
                 }
             },
             "required": ["campaign_id", "attacker", "target"]
