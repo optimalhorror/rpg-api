@@ -420,8 +420,23 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         if team_name:
             combat_state["participants"][attacker_resolved]["team"] = team_name
 
-        # Simple combat: roll d100 for hit, using attacker's hit_chance percentage
+        # Check if attacker is dead (0 HP)
         attacker_data = combat_state["participants"][attacker_resolved]
+        if attacker_data.get("health", 0) <= 0:
+            return [TextContent(
+                type="text",
+                text=f"{attacker_resolved} is dead and cannot attack."
+            )]
+
+        # Check if target is dead (0 HP)
+        target_data = combat_state["participants"][target_resolved]
+        if target_data.get("health", 0) <= 0:
+            return [TextContent(
+                type="text",
+                text=f"{target_resolved} is already dead."
+            )]
+
+        # Simple combat: roll d100 for hit, using attacker's hit_chance percentage
         hit_chance = attacker_data.get("hit_chance", 50)
         hit_roll = roll_dice("1d100")
         hit = hit_roll <= hit_chance
