@@ -377,8 +377,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         result_lines = []
 
         if hit:
-            # Check for team betrayal - attacking your own team
-            if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
+            # Check for self-attack or team betrayal
+            if attacker_resolved == target_resolved:
+                result_lines.append(f"{attacker_resolved} was their own worst enemy all along.")
+            elif check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
             # Resolve weapon damage
