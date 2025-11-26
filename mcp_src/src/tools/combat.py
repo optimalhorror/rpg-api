@@ -49,10 +49,28 @@ def sync_npc_health(campaign_id: str, participant_name: str, health: int, max_he
 
 
 def is_participant_player(campaign_id: str, name: str) -> bool:
-    """Check if a participant is the player character."""
+    """Check if a participant is the player character.
+
+    Uses two methods to ensure player is never accidentally deleted:
+    1. Check campaign.json for player.name match
+    2. Check if NPC file has 'player' keyword
+    """
+    # Method 1: Check campaign.json player name
     campaign_data = campaign_repo.get_campaign(campaign_id)
-    player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-    return name.lower() == player_name.lower()
+    if campaign_data:
+        player_name = campaign_data.get("player", {}).get("name", "")
+        if player_name and name.lower() == player_name.lower():
+            return True
+
+    # Method 2: Check NPC keywords for "player" (defensive check)
+    participant_slug = slugify(name)
+    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
+    if npc_data:
+        keywords = npc_data.get("keywords", [])
+        if "player" in [k.lower() for k in keywords]:
+            return True
+
+    return False
 
 
 def sync_all_participants_health(campaign_id: str, combat_state: dict) -> None:
@@ -73,16 +91,13 @@ def end_combat_for_player(campaign_id: str, combat_state: dict) -> str:
     return "\nCombat has ended!"
 
 
-def get_participant_stats(campaign_id: str, name: str) -> dict:
-    """Get participant stats: check NPC file first, then bestiary.
+def get_participant_stats(campaign_id: str, name: str) -> dict | None:
+    """Get participant stats: check NPC file first (with keyword matching), then bestiary.
 
-    Note: Participants are validated before calling this function via resolve_participant_name(),
-    so this function should always find either NPC or bestiary data.
+    Returns None if participant not found (caller should handle this).
     """
-    participant_slug = slugify(name)
-
-    # 1. Check if existing NPC (load persisted health + hit_chance)
-    npc_data = npc_repo.get_npc(campaign_id, participant_slug)
+    # 1. Check if existing NPC using keyword matching (e.g., "player", "you", etc.)
+    _, npc_data = resolve_npc_by_keyword(campaign_id, name)
     if npc_data:
         return {
             "health": npc_data.get("health", 20),
@@ -101,6 +116,9 @@ def get_participant_stats(campaign_id: str, name: str) -> dict:
             "max_health": max_health,
             "hit_chance": hit_chance
         }
+
+    # Not found
+    return None
 
 
 def handle_participant_death(campaign_id: str, participant_name: str) -> None:
@@ -269,6 +287,11 @@ async def handle_spawn_enemy(arguments: dict) -> list[TextContent]:
 
         # Get stats from bestiary template
         stats = get_participant_stats(campaign_id, bestiary_template)
+        if not stats:
+            return [TextContent(
+                type="text",
+                text=err_not_found("Bestiary template stats", bestiary_template, "Template may be corrupted.")
+            )]
         stats["team"] = team
         stats["bestiary_template"] = bestiary_template  # Store template for weapon lookup
 
@@ -379,6 +402,11 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         for participant, resolved_name in [(attacker, attacker_resolved), (target, target_resolved)]:
             if resolved_name not in combat_state["participants"]:
                 stats = get_participant_stats(campaign_id, resolved_name)
+                if not stats:
+                    return [TextContent(
+                        type="text",
+                        text=err_not_found("Participant", resolved_name, "NPC may have been deleted.")
+                    )]
 
                 # Assign team
                 if participant == attacker:
