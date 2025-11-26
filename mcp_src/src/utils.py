@@ -206,3 +206,42 @@ def healing_descriptor(heal_amount: int, heal_formula: str) -> str:
         return "strong healing"
     else:
         return "major restoration"
+
+
+# --- Error formatting utilities ---
+
+def err_not_found(entity: str, name: str, hint: str | None = None) -> str:
+    """Format 'not found' error. Example: "NPC 'Steve' not found." """
+    msg = f"{entity} '{name}' not found."
+    if hint:
+        msg += f" {hint}"
+    return msg
+
+
+def err_already_exists(entity: str, name: str, hint: str | None = None) -> str:
+    """Format 'already exists' error. Example: "NPC 'Steve' already exists." """
+    msg = f"{entity} '{name}' already exists."
+    if hint:
+        msg += f" {hint}"
+    return msg
+
+
+def err_missing(owner: str, item: str, available: str | None = None) -> str:
+    """Format 'doesn't have' error. Example: "Steve doesn't have 'Sword'. Available: Dagger, Axe" """
+    msg = f"{owner} doesn't have '{item}'."
+    if available:
+        msg += f" Available: {available}"
+    return msg
+
+
+def err_required(param: str) -> str:
+    """Format 'required' error. Example: "campaign_id is required." """
+    return f"{param} is required."
+
+
+def err_invalid(description: str, hint: str | None = None) -> str:
+    """Format 'invalid' error. Example: "Weapon damage must be specified." """
+    msg = description
+    if hint:
+        msg += f" {hint}"
+    return msg

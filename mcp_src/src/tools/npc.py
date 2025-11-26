@@ -1,6 +1,6 @@
 from mcp.types import Tool, TextContent
 
-from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance
+from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance, err_not_found, err_already_exists
 from repos import npc_repo, combat_repo, resolve_npc_by_keyword
 
 
@@ -73,7 +73,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         if existing_npc:
             return [TextContent(
                 type="text",
-                text=f"Error: NPC '{npc_name}' already exists.\n\nUse get_npc or list_npcs to view existing NPCs."
+                text=err_already_exists("NPC", npc_name, "Use get_npc or list_npcs to view existing NPCs.")
             )]
 
         # Create NPC data
@@ -170,7 +170,7 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         if not npc_data:
             return [TextContent(
                 type="text",
-                text=f"NPC '{npc_name}' not found in campaign. Use NPC name or keyword."
+                text=err_not_found("NPC", npc_name, "Use NPC name or keyword.")
             )]
 
         # Roll healing

@@ -2,7 +2,7 @@ import random
 
 from mcp.types import Tool, TextContent
 
-from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor, threat_level_to_hit_chance, format_list_from_dict
+from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor, threat_level_to_hit_chance, format_list_from_dict, err_not_found, err_already_exists, err_missing, err_invalid
 from repos import npc_repo, bestiary_repo, combat_repo, campaign_repo, resolve_npc_by_keyword
 
 
@@ -191,7 +191,7 @@ def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, we
                 return ("1d4", False, None)
             else:
                 items_list = format_list_from_dict(items, "none (try 'fists' for unarmed)")
-                return (None, False, f"Error: {attacker_name} doesn't have '{weapon}' in inventory. Available items: {items_list}")
+                return (None, False, err_missing(attacker_name, weapon, items_list))
 
     # 2. Bestiary monsters - use their defined weapons
     elif bestiary_entry:
@@ -202,11 +202,11 @@ def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, we
             return (damage, False, None)
         else:
             weapons_list = format_list_from_dict(bestiary_weapons)
-            return (None, False, f"Error: {attacker_name} doesn't have '{weapon}'. Available weapons: {weapons_list}")
+            return (None, False, err_missing(attacker_name, weapon, weapons_list))
 
     # 3. Unknown participants
     else:
-        return (None, False, f"Error: {attacker_name} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry).")
+        return (None, False, err_invalid(f"'{attacker_name}' is not a valid participant.", "Use create_npc or create_bestiary_entry first."))
 
 
 def get_spawn_enemy_tool() -> Tool:
@@ -252,7 +252,7 @@ async def handle_spawn_enemy(arguments: dict) -> list[TextContent]:
         if not entry:
             return [TextContent(
                 type="text",
-                text=f"Error: Bestiary template '{bestiary_template}' not found. Use create_bestiary_entry first."
+                text=err_not_found("Bestiary template", bestiary_template, "Use create_bestiary_entry first.")
             )]
 
         # Load or create combat state
@@ -264,7 +264,7 @@ async def handle_spawn_enemy(arguments: dict) -> list[TextContent]:
         if name in combat_state["participants"]:
             return [TextContent(
                 type="text",
-                text=f"Error: '{name}' is already in combat. Use a different name."
+                text=err_already_exists("Combatant", name, "Use a different name.")
             )]
 
         # Get stats from bestiary template
@@ -349,7 +349,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             if not attacker_valid:
                 return [TextContent(
                     type="text",
-                    text=f"Error: '{attacker}' not found. Use NPC name/keyword, bestiary creature, or spawn_enemy first."
+                    text=err_not_found("Participant", attacker, "Use NPC name/keyword or spawn_enemy first.")
                 )]
 
         # Resolve target: check combat first, then NPC/bestiary
@@ -364,7 +364,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             if not target_valid:
                 return [TextContent(
                     type="text",
-                    text=f"Error: '{target}' not found. Use NPC name/keyword, bestiary creature, or spawn_enemy first."
+                    text=err_not_found("Participant", target, "Use NPC name/keyword or spawn_enemy first.")
                 )]
 
         # Validate weapon BEFORE adding participants to combat

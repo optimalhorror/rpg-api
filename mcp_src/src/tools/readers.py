@@ -1,7 +1,7 @@
 """Resource reader tools - expose MCP resources as callable tools."""
 from mcp.types import Tool, TextContent
 
-from utils import health_description
+from utils import health_description, err_not_found, err_required
 from repos import campaign_repo, npc_repo, bestiary_repo, combat_repo, resolve_npc_by_keyword
 
 
@@ -71,11 +71,11 @@ async def handle_get_campaign(arguments: dict) -> list[TextContent]:
     campaign_id = arguments.get("campaign_id")
 
     if not campaign_id:
-        return [TextContent(type="text", text="Error: campaign_id is required")]
+        return [TextContent(type="text", text=err_required("campaign_id"))]
 
     campaign_data = campaign_repo.get_campaign(campaign_id)
     if not campaign_data:
-        return [TextContent(type="text", text=f"Error: Campaign not found: {campaign_id}")]
+        return [TextContent(type="text", text=err_not_found("Campaign", campaign_id))]
 
     player_info = campaign_data.get('player', {})
     result = f"Campaign: {campaign_data.get('name')}\n"
@@ -109,7 +109,7 @@ async def handle_list_npcs(arguments: dict) -> list[TextContent]:
     campaign_id = arguments.get("campaign_id")
 
     if not campaign_id:
-        return [TextContent(type="text", text="Error: campaign_id is required")]
+        return [TextContent(type="text", text=err_required("campaign_id"))]
 
     npcs_data = npc_repo.get_npc_index(campaign_id)
     if not npcs_data:
@@ -153,15 +153,15 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     npc_name = arguments.get("npc_name")
 
     if not campaign_id:
-        return [TextContent(type="text", text="Error: campaign_id is required")]
+        return [TextContent(type="text", text=err_required("campaign_id"))]
 
     if not npc_name:
-        return [TextContent(type="text", text="Error: npc_name is required")]
+        return [TextContent(type="text", text=err_required("npc_name"))]
 
     # Resolve NPC by name or keyword
     _, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(type="text", text=f"Error: NPC not found: {npc_name}")]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     # Narrative presentation (hide mechanics)
     health = npc_data.get('health', 20)
@@ -235,7 +235,7 @@ async def handle_get_combat_status(arguments: dict) -> list[TextContent]:
     campaign_id = arguments.get("campaign_id")
 
     if not campaign_id:
-        return [TextContent(type="text", text="Error: campaign_id is required")]
+        return [TextContent(type="text", text=err_required("campaign_id"))]
 
     combat_data = combat_repo.get_combat_state(campaign_id)
     if not combat_data:
@@ -281,7 +281,7 @@ async def handle_get_bestiary(arguments: dict) -> list[TextContent]:
     campaign_id = arguments.get("campaign_id")
 
     if not campaign_id:
-        return [TextContent(type="text", text="Error: campaign_id is required")]
+        return [TextContent(type="text", text=err_required("campaign_id"))]
 
     bestiary_data = bestiary_repo.get_bestiary(campaign_id)
     if not bestiary_data:

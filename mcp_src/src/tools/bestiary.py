@@ -1,5 +1,6 @@
 from mcp.types import Tool, TextContent
 
+from utils import err_already_exists
 from repos import bestiary_repo
 
 
@@ -56,10 +57,8 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         if entry_key in bestiary:
             existing_entry = bestiary[entry_key]
             weapon_list = ", ".join([f"{w} ({d})" for w, d in existing_entry.get("weapons", {}).items()])
-            return [TextContent(
-                type="text",
-                text=f"Error: Bestiary entry '{name}' already exists.\n\nExisting entry:\nThreat Level: {existing_entry.get('threat_level')}\nHP: {existing_entry.get('hp')}\nWeapons: {weapon_list}\n\nUse get_bestiary to view all entries."
-            )]
+            details = f"Existing: {existing_entry.get('threat_level')}, {existing_entry.get('hp')} HP, {weapon_list}. Use get_bestiary to view."
+            return [TextContent(type="text", text=err_already_exists("Bestiary entry", name, details))]
 
         # Add entry
         bestiary[entry_key] = {
