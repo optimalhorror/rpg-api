@@ -200,6 +200,7 @@ async def handle_spawn_enemy(arguments: dict) -> list[TextContent]:
         # Get stats from bestiary template
         stats = get_participant_stats(campaign_id, bestiary_template)
         stats["team"] = team
+        stats["bestiary_template"] = bestiary_template  # Store template for weapon lookup
 
         # Add to combat
         combat_state["participants"][name] = stats
@@ -313,13 +314,11 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         if team_name:
             combat_state["participants"][attacker_resolved]["team"] = team_name
 
-        # Simple combat: roll d20 for hit, using attacker's hit_chance
+        # Simple combat: roll d100 for hit, using attacker's hit_chance percentage
         attacker_data = combat_state["participants"][attacker_resolved]
         hit_chance = attacker_data.get("hit_chance", 50)
-        hit_roll = random.randint(1, 20)
-        # Convert hit_chance percentage to d20 threshold (e.g., 50% = >= 11, 75% = >= 6)
-        hit_threshold = 21 - int(hit_chance * 20 / 100)
-        hit = hit_roll >= hit_threshold
+        hit_roll = roll_dice("1d100")
+        hit = hit_roll <= hit_chance
 
         result_lines = []
 
@@ -335,7 +334,9 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
 
             # Check if attacker is an NPC or monster
             npc_data = npc_repo.get_npc(campaign_id, attacker_slug)
-            bestiary_entry = bestiary_repo.get_entry(campaign_id, attacker_resolved)
+            # For spawned enemies, use stored template; otherwise use participant name
+            bestiary_lookup = attacker_data.get("bestiary_template", attacker_resolved)
+            bestiary_entry = bestiary_repo.get_entry(campaign_id, bestiary_lookup)
 
             # 1. NPCs with inventory - check real-time inventory (not combat state)
             if npc_data and "inventory" in npc_data:
