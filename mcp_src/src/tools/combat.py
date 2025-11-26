@@ -2,7 +2,7 @@ import random
 
 from mcp.types import Tool, TextContent
 
-from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor, threat_level_to_hit_chance
+from utils import get_campaign_dir, health_description, slugify, roll_dice, damage_descriptor, threat_level_to_hit_chance, format_list_from_dict
 from repos import npc_repo, bestiary_repo, combat_repo, campaign_repo, resolve_npc_by_keyword
 
 
@@ -46,6 +46,31 @@ def sync_npc_health(campaign_id: str, participant_name: str, health: int, max_he
         npc_data["health"] = health
         npc_data["max_health"] = max_health
         npc_repo.save_npc(campaign_id, participant_slug, npc_data)
+
+
+def is_participant_player(campaign_id: str, name: str) -> bool:
+    """Check if a participant is the player character."""
+    campaign_data = campaign_repo.get_campaign(campaign_id)
+    player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
+    return name.lower() == player_name.lower()
+
+
+def sync_all_participants_health(campaign_id: str, combat_state: dict) -> None:
+    """Sync all remaining participants' health to NPC files."""
+    for participant_name, participant_data in combat_state["participants"].items():
+        sync_npc_health(
+            campaign_id,
+            participant_name,
+            participant_data["health"],
+            participant_data["max_health"]
+        )
+
+
+def end_combat_for_player(campaign_id: str, combat_state: dict) -> str:
+    """Handle combat ending when player leaves. Returns end message."""
+    sync_all_participants_health(campaign_id, combat_state)
+    combat_repo.delete_combat_state(campaign_id)
+    return "\nCombat has ended!"
 
 
 def get_participant_stats(campaign_id: str, name: str) -> dict:
@@ -93,13 +118,8 @@ def handle_participant_death(campaign_id: str, participant_name: str) -> None:
         npc_data["health"] = 0
         npc_repo.save_npc(campaign_id, participant_slug, npc_data)
 
-        # Check if dead participant is the player character
-        campaign_data = campaign_repo.get_campaign(campaign_id)
-        player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-        is_player = participant_name.lower() == player_name.lower()
-
         # Delete NPC file for non-player deaths
-        if not is_player:
+        if not is_participant_player(campaign_id, participant_name):
             npc_repo.delete_npc(campaign_id, participant_slug)
 
 
@@ -111,15 +131,7 @@ def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, st
     """
     remaining_teams = set(p.get("team") for p in combat_state["participants"].values())
     if len(remaining_teams) <= 1:
-        # Sync remaining participants' health to NPC files if they exist
-        for participant_name, participant_data in combat_state["participants"].items():
-            sync_npc_health(
-                campaign_id,
-                participant_name,
-                participant_data["health"],
-                participant_data["max_health"]
-            )
-
+        sync_all_participants_health(campaign_id, combat_state)
         combat_repo.delete_combat_state(campaign_id)
         return True, "\nCombat has ended!"
     else:
@@ -348,8 +360,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                         is_improvised = False  # Not improvised, just weak
                     else:
                         # Item doesn't exist in inventory
-                        available_items = list(items.keys()) if items else []
-                        items_list = ", ".join(available_items) if available_items else "none (try 'fists' for unarmed)"
+                        items_list = format_list_from_dict(items, "none (try 'fists' for unarmed)")
                         return [TextContent(
                             type="text",
                             text=f"Error: {attacker_resolved} doesn't have '{weapon}' in inventory. Available items: {items_list}"
@@ -361,8 +372,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 if weapon in bestiary_weapons:
                     damage_formula = bestiary_weapons[weapon]
                 else:
-                    available_weapons = list(bestiary_weapons.keys()) if bestiary_weapons else []
-                    weapons_list = ", ".join(available_weapons) if available_weapons else "none"
+                    weapons_list = format_list_from_dict(bestiary_weapons)
                     return [TextContent(
                         type="text",
                         text=f"Error: {attacker_resolved} doesn't have '{weapon}'. Available weapons: {weapons_list}"
@@ -404,26 +414,12 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 # Handle death: delete NPC file (unless player)
                 handle_participant_death(campaign_id, target_resolved)
 
-                # Check if dead target is the player
-                campaign_data = campaign_repo.get_campaign(campaign_id)
-                player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-                is_player = target_resolved.lower() == player_name.lower()
-
                 # Remove dead target from combat
                 del combat_state["participants"][target_resolved]
 
                 # If player died, end combat entirely
-                if is_player:
-                    # Sync remaining participants' health to NPC files
-                    for participant_name, participant_data in combat_state["participants"].items():
-                        sync_npc_health(
-                            campaign_id,
-                            participant_name,
-                            participant_data["health"],
-                            participant_data["max_health"]
-                        )
-                    combat_repo.delete_combat_state(campaign_id)
-                    result_lines.append("\nCombat has ended!")
+                if is_participant_player(campaign_id, target_resolved):
+                    result_lines.append(end_combat_for_player(campaign_id, combat_state))
                 else:
                     # Check if combat should end (only one team remains)
                     combat_ended, end_msg = check_and_end_combat(campaign_id, combat_state)
@@ -503,9 +499,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
             handle_participant_death(campaign_id, name)
 
         # Check if removed participant is the player
-        campaign_data = campaign_repo.get_campaign(campaign_id)
-        player_name = campaign_data.get("player", {}).get("name", "") if campaign_data else ""
-        is_player = name.lower() == player_name.lower()
+        player_leaving = is_participant_player(campaign_id, name)
 
         # Remove participant from combat
         del combat_state["participants"][name]
@@ -519,17 +513,8 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         result_text = reason_messages.get(reason, f"{name} has left combat.")
 
         # If player left combat, end combat entirely
-        if is_player:
-            # Sync remaining participants' health to NPC files
-            for participant_name, participant_data in combat_state["participants"].items():
-                sync_npc_health(
-                    campaign_id,
-                    participant_name,
-                    participant_data["health"],
-                    participant_data["max_health"]
-                )
-            combat_repo.delete_combat_state(campaign_id)
-            result_text += "\nCombat has ended!"
+        if player_leaving:
+            result_text += end_combat_for_player(campaign_id, combat_state)
         else:
             # Check if combat should end (only one team remains)
             combat_ended, end_msg = check_and_end_combat(campaign_id, combat_state)

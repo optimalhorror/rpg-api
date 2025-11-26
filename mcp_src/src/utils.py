@@ -152,6 +152,21 @@ def damage_descriptor(damage: int, weapon_formula: str) -> str:
         return "crashes down with devastating force"
 
 
+def format_list_from_dict(d: dict | None, empty_message: str = "none") -> str:
+    """Format dictionary keys as comma-separated list.
+
+    Args:
+        d: Dictionary to format (uses keys)
+        empty_message: Message to return if dict is empty or None
+
+    Returns:
+        Comma-separated string of keys, or empty_message if empty
+    """
+    if not d:
+        return empty_message
+    return ", ".join(d.keys())
+
+
 def healing_descriptor(heal_amount: int, heal_formula: str) -> str:
     """
     Convert healing amount to narrative descriptor based on healing's potential.

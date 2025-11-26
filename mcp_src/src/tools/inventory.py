@@ -1,5 +1,5 @@
 from mcp.types import Tool, TextContent
-from utils import roll_dice, slugify
+from utils import roll_dice, slugify, format_list_from_dict
 from repos import npc_repo
 
 
@@ -97,8 +97,7 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
     if container:
         items = npc_data["inventory"]["items"]
         if container not in items:
-            available_items = list(items.keys()) if items else []
-            items_list = ", ".join(available_items) if available_items else "none"
+            items_list = format_list_from_dict(items)
             return [TextContent(
                 type="text",
                 text=f"Error: Container '{container}' not found in {npc_name}'s inventory. Available items: {items_list}"
