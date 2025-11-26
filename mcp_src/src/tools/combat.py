@@ -312,7 +312,7 @@ def get_attack_tool() -> Tool:
     """Return the attack tool definition."""
     return Tool(
         name="attack",
-        description="Perform an attack action between NPCs and/or spawned enemies. Participants must already exist: NPCs (created with create_npc), bestiary creatures (direct match), or spawned enemies (created with spawn_enemy). Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage).",
+        description="Perform an attack action between NPCs and/or spawned enemies. Participants must already exist: NPCs (created with create_npc), bestiary creatures (direct match), or spawned enemies (created with spawn_enemy). Returns human-readable combat results including hit/miss, damage description, and health states. If no weapon is specified, attacker uses unarmed combat (1d4 damage). Note: Attacking a teammate is betrayal - attacker switches to solo team.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -334,7 +334,7 @@ def get_attack_tool() -> Tool:
                 },
                 "team": {
                     "type": "string",
-                    "description": "Optional: Team name for the attacker. If not specified, attacker fights solo."
+                    "description": "Optional: Team name for the attacker. If not specified, keeps current team (or solo if new to combat)."
                 }
             },
             "required": ["campaign_id", "attacker", "target"]
@@ -485,8 +485,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                 # Save combat state since combat continues
                 combat_repo.save_combat_state(campaign_id, combat_state)
         else:
-            # Miss - but still check for team betrayal
-            if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
+            # Miss - but still check for self-attack or team betrayal
+            if attacker_resolved == target_resolved:
+                result_lines.append(f"{attacker_resolved} was their own worst enemy all along.")
+            elif check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
             result_lines.append(f"{attacker_resolved} attacks {target_resolved} with {weapon}.")
