@@ -2,7 +2,6 @@
 import sys
 import json
 import asyncio
-from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException

@@ -305,7 +305,7 @@ async def handle_spawn_enemy(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error spawning enemy: {str(e)}")]
+        return [TextContent(text=f"Error spawning enemy: {str(e)}")]
 
 
 def get_attack_tool() -> Tool:
@@ -396,7 +396,7 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
         attacker_data_for_validation = combat_state["participants"].get(attacker_resolved, {})
         _, _, weapon_error = resolve_weapon(campaign_id, attacker_resolved, attacker_data_for_validation, weapon)
         if weapon_error:
-            return [TextContent(type="text", text=weapon_error)]
+            return [TextContent(text=weapon_error)]
 
         # Initialize participants if not in combat yet
         for participant, resolved_name in [(attacker, attacker_resolved), (target, target_resolved)]:
@@ -501,10 +501,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             # Save combat state since combat continues
             combat_repo.save_combat_state(campaign_id, combat_state)
 
-        return [TextContent(type="text", text="\n".join(result_lines))]
+        return [TextContent(text="\n".join(result_lines))]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error in attack: {str(e)}")]
+        return [TextContent(text=f"Error in attack: {str(e)}")]
 
 
 def get_remove_from_combat_tool() -> Tool:
@@ -544,10 +544,10 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
         # Load combat state via repository
         combat_state = combat_repo.get_combat_state(campaign_id)
         if not combat_state:
-            return [TextContent(type="text", text="There's no active combat.")]
+            return [TextContent(text="There's no active combat.")]
 
         if name not in combat_state["participants"]:
-            return [TextContent(type="text", text=f"{name} is not in combat.")]
+            return [TextContent(text=f"{name} is not in combat.")]
 
         # If death, handle death (sets HP to 0, deletes NPC file if not player)
         if reason == "death":
@@ -576,7 +576,7 @@ async def handle_remove_from_combat(arguments: dict) -> list[TextContent]:
             if combat_ended:
                 result_text += end_msg
 
-        return [TextContent(type="text", text=result_text)]
+        return [TextContent(text=result_text)]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error removing from combat: {str(e)}")]
+        return [TextContent(text=f"Error removing from combat: {str(e)}")]

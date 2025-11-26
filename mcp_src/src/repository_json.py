@@ -13,6 +13,11 @@ from repository import (
 from utils import get_campaign_dir, load_campaign_list, CAMPAIGNS_DIR, slugify
 
 
+def __npc_filename(slug: str) -> str:
+    """Convert NPC slug to filename. Example: 'steve' -> 'npc-steve.json'"""
+    return f"npc-{slug}.json"
+
+
 class JsonCampaignRepository(CampaignRepository):
     """JSON file-based campaign persistence."""
 
@@ -49,7 +54,7 @@ class JsonNPCRepository(NPCRepository):
 
     def get_npc(self, campaign_id: str, npc_slug: str) -> Optional[Dict[str, Any]]:
         campaign_dir = get_campaign_dir(campaign_id)
-        npc_file = campaign_dir / f"npc-{npc_slug}.json"
+        npc_file = campaign_dir / _npc_filename(npc_slug)
 
         if not npc_file.exists():
             return None
@@ -58,8 +63,18 @@ class JsonNPCRepository(NPCRepository):
 
     def save_npc(self, campaign_id: str, npc_slug: str, data: Dict[str, Any]) -> None:
         campaign_dir = get_campaign_dir(campaign_id)
-        npc_file = campaign_dir / f"npc-{npc_slug}.json"
+        npc_file = campaign_dir / _npc_filename(npc_slug)
         npc_file.write_text(json.dumps(data, indent=2))
+
+    def create_npc(self, campaign_id: str, npc_slug: str, data: Dict[str, Any], keywords: list[str]) -> None:
+        """Create NPC and update index atomically."""
+        self.save_npc(campaign_id, npc_slug, data)
+        npcs_index = self.get_npc_index(campaign_id)
+        npcs_index[npc_slug] = {
+            "keywords": keywords,
+            "file": _npc_filename(npc_slug)
+        }
+        self.save_npc_index(campaign_id, npcs_index)
 
     def get_npc_index(self, campaign_id: str) -> Dict[str, Any]:
         campaign_dir = get_campaign_dir(campaign_id)
@@ -78,7 +93,7 @@ class JsonNPCRepository(NPCRepository):
     def delete_npc(self, campaign_id: str, npc_slug: str) -> None:
         """Delete NPC file and remove from index."""
         campaign_dir = get_campaign_dir(campaign_id)
-        npc_file = campaign_dir / f"npc-{npc_slug}.json"
+        npc_file = campaign_dir / _npc_filename(npc_slug)
 
         # Delete the NPC file if it exists
         if npc_file.exists():

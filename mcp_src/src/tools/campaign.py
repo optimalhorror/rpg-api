@@ -43,10 +43,10 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         player_health = 25  # All players start with 25 HP
 
         if not campaign_name:
-            return [TextContent(type="text", text=err_required("name"))]
+            return [TextContent(text=err_required("name"))]
 
         if not player_name:
-            return [TextContent(type="text", text=err_required("player_name"))]
+            return [TextContent(text=err_required("player_name"))]
 
         # Generate unique ID and slug
         campaign_id = str(uuid4())
@@ -110,7 +110,7 @@ async def handle_begin_campaign(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error creating campaign: {str(e)}")]
+        return [TextContent(text=f"Error creating campaign: {str(e)}")]
 
 
 def get_delete_campaign_tool() -> Tool:
@@ -141,7 +141,7 @@ async def handle_delete_campaign(arguments: dict) -> list[TextContent]:
         campaign_slug = campaign_list.get(campaign_id)
 
         if not campaign_slug:
-            return [TextContent(type="text", text=err_not_found("Campaign", campaign_id))]
+            return [TextContent(text=err_not_found("Campaign", campaign_id))]
 
         # Get campaign name before deleting
         campaign_data = campaign_repo.get_campaign(campaign_id)
@@ -162,4 +162,4 @@ async def handle_delete_campaign(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error deleting campaign: {str(e)}")]
+        return [TextContent(text=f"Error deleting campaign: {str(e)}")]

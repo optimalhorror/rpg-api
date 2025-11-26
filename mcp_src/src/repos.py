@@ -20,6 +20,23 @@ bestiary_repo = JsonBestiaryRepository()
 combat_repo = JsonCombatRepository()
 
 
+def sync_npc_to_combat(campaign_id: str, npc_slug: str, health: int) -> None:
+    """Sync NPC health to combat state if they're an active participant.
+
+    Call this after modifying NPC health outside of combat (e.g., heal_npc).
+    """
+    combat_state = combat_repo.get_combat_state(campaign_id)
+    if not combat_state or "participants" not in combat_state:
+        return
+
+    # Find NPC in combat by matching slug
+    for participant_name in combat_state["participants"]:
+        if slugify(participant_name) == npc_slug:
+            combat_state["participants"][participant_name]["health"] = health
+            combat_repo.save_combat_state(campaign_id, combat_state)
+            break
+
+
 def resolve_npc_by_keyword(campaign_id: str, name: str) -> tuple[str, dict] | tuple[None, None]:
     """Resolve NPC by name or keyword.
 

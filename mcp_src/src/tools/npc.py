@@ -1,7 +1,7 @@
 from mcp.types import Tool, TextContent
 
 from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance, err_not_found, err_already_exists
-from repos import npc_repo, combat_repo, resolve_npc_by_keyword
+from repos import npc_repo, resolve_npc_by_keyword, sync_npc_to_combat
 
 
 def get_create_npc_tool() -> Tool:
@@ -99,16 +99,8 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
                 "damage": damage
             }
 
-        # Save NPC via repository
-        npc_repo.save_npc(campaign_id, npc_slug, npc_data)
-
-        # Update NPC index
-        npcs_index = npc_repo.get_npc_index(campaign_id)
-        npcs_index[npc_slug] = {
-            "keywords": keywords,
-            "file": f"npc-{npc_slug}.json"
-        }
-        npc_repo.save_npc_index(campaign_id, npcs_index)
+        # Save NPC and update index atomically
+        npc_repo.create_npc(campaign_id, npc_slug, npc_data, keywords)
 
         # Build success message
         message = f"NPC '{npc_name}' created successfully!\n\nFile: npc-{npc_slug}.json\nKeywords: {', '.join(keywords)}"
@@ -123,7 +115,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error creating NPC: {str(e)}")]
+        return [TextContent(text=f"Error creating NPC: {str(e)}")]
 
 
 def get_heal_npc_tool() -> Tool:
@@ -186,15 +178,7 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         npc_repo.save_npc(campaign_id, npc_slug, npc_data)
 
         # Sync health to combat state if NPC is in active combat
-        combat_state = combat_repo.get_combat_state(campaign_id)
-        if combat_state and "participants" in combat_state:
-            # Find NPC in combat (match by name, case-insensitive)
-            for participant_name in combat_state["participants"].keys():
-                if slugify(participant_name) == npc_slug:
-                    # Update combat health to match NPC file
-                    combat_state["participants"][participant_name]["health"] = new_health
-                    combat_repo.save_combat_state(campaign_id, combat_state)
-                    break
+        sync_npc_to_combat(campaign_id, npc_slug, new_health)
 
         # Narrative output (hide mechanics)
         source_str = f" from {source}" if source else ""
@@ -227,4 +211,4 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(type="text", text=f"Error healing NPC: {str(e)}")]
+        return [TextContent(text=f"Error healing NPC: {str(e)}")]
