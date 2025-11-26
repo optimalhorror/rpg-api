@@ -2,7 +2,7 @@
 from mcp.types import Tool, TextContent
 
 from utils import health_description
-from repos import campaign_repo, npc_repo, bestiary_repo, combat_repo
+from repos import campaign_repo, npc_repo, bestiary_repo, combat_repo, resolve_npc_by_keyword
 
 
 def get_list_campaigns_tool() -> Tool:
@@ -129,7 +129,7 @@ def get_get_npc_tool() -> Tool:
     """Return the get_npc tool definition."""
     return Tool(
         name="get_npc",
-        description="Get full NPC details including stats, health, weapons, and description. Use list_npcs first to find the NPC key.",
+        description="Get full NPC details including stats, health, weapons, and description. Accepts NPC name or keyword (e.g., 'Steve', 'player', 'blacksmith').",
         inputSchema={
             "type": "object",
             "properties": {
@@ -137,12 +137,12 @@ def get_get_npc_tool() -> Tool:
                     "type": "string",
                     "description": "The campaign ID"
                 },
-                "npc_key": {
+                "npc_name": {
                     "type": "string",
-                    "description": "The NPC key from list_npcs (e.g., 'aragorn', 'user')"
+                    "description": "NPC name or keyword (e.g., 'Steve', 'player', 'blacksmith')"
                 }
             },
-            "required": ["campaign_id", "npc_key"]
+            "required": ["campaign_id", "npc_name"]
         }
     )
 
@@ -150,17 +150,18 @@ def get_get_npc_tool() -> Tool:
 async def handle_get_npc(arguments: dict) -> list[TextContent]:
     """Handle the get_npc tool call."""
     campaign_id = arguments.get("campaign_id")
-    npc_key = arguments.get("npc_key")
+    npc_name = arguments.get("npc_name")
 
     if not campaign_id:
         return [TextContent(type="text", text="Error: campaign_id is required")]
 
-    if not npc_key:
-        return [TextContent(type="text", text="Error: npc_key is required")]
+    if not npc_name:
+        return [TextContent(type="text", text="Error: npc_name is required")]
 
-    npc_data = npc_repo.get_npc(campaign_id, npc_key.lower())
+    # Resolve NPC by name or keyword
+    _, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(type="text", text=f"Error: NPC not found: {npc_key}")]
+        return [TextContent(type="text", text=f"Error: NPC not found: {npc_name}")]
 
     # Narrative presentation (hide mechanics)
     health = npc_data.get('health', 20)

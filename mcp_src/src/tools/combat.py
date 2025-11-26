@@ -139,6 +139,19 @@ def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, st
         return False, ""
 
 
+def find_item_case_insensitive(items: dict, key: str) -> tuple[str | None, any]:
+    """Find an item in a dictionary using case-insensitive key matching.
+
+    Returns:
+        (actual_key, value) if found, (None, None) otherwise
+    """
+    key_lower = key.lower()
+    for item_key, item_value in items.items():
+        if item_key.lower() == key_lower:
+            return (item_key, item_value)
+    return (None, None)
+
+
 def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, weapon: str) -> tuple[str | None, bool, str | None]:
     """Resolve weapon damage formula for an attacker.
 
@@ -163,8 +176,9 @@ def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, we
         inventory = npc_data["inventory"]
         items = inventory.get("items", {})
 
-        if weapon in items:
-            item = items[weapon]
+        # Case-insensitive weapon lookup
+        _, item = find_item_case_insensitive(items, weapon)
+        if item:
             if item.get("weapon") and item.get("damage"):
                 return (item["damage"], False, None)
             else:
@@ -182,8 +196,10 @@ def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, we
     # 2. Bestiary monsters - use their defined weapons
     elif bestiary_entry:
         bestiary_weapons = bestiary_entry.get("weapons", {})
-        if weapon in bestiary_weapons:
-            return (bestiary_weapons[weapon], False, None)
+        # Case-insensitive weapon lookup
+        _, damage = find_item_case_insensitive(bestiary_weapons, weapon)
+        if damage:
+            return (damage, False, None)
         else:
             weapons_list = format_list_from_dict(bestiary_weapons)
             return (None, False, f"Error: {attacker_name} doesn't have '{weapon}'. Available weapons: {weapons_list}")
@@ -351,6 +367,14 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
                     text=f"Error: '{target}' not found. Use NPC name/keyword, bestiary creature, or spawn_enemy first."
                 )]
 
+        # Validate weapon BEFORE adding participants to combat
+        # For existing participants, use their combat data; for new ones, use empty dict
+        # (resolve_weapon will check NPC inventory first, then bestiary by name)
+        attacker_data_for_validation = combat_state["participants"].get(attacker_resolved, {})
+        _, _, weapon_error = resolve_weapon(campaign_id, attacker_resolved, attacker_data_for_validation, weapon)
+        if weapon_error:
+            return [TextContent(type="text", text=weapon_error)]
+
         # Initialize participants if not in combat yet
         for participant, resolved_name in [(attacker, attacker_resolved), (target, target_resolved)]:
             if resolved_name not in combat_state["participants"]:
@@ -383,12 +407,10 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             elif check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
-            # Resolve weapon damage
-            damage_formula, is_improvised, weapon_error = resolve_weapon(
+            # Resolve weapon damage (already validated early, so no error check needed)
+            damage_formula, is_improvised, _ = resolve_weapon(
                 campaign_id, attacker_resolved, attacker_data, weapon
             )
-            if weapon_error:
-                return [TextContent(type="text", text=weapon_error)]
 
             # Roll damage
             damage = roll_dice(damage_formula)
