@@ -139,6 +139,60 @@ def check_and_end_combat(campaign_id: str, combat_state: dict) -> tuple[bool, st
         return False, ""
 
 
+def resolve_weapon(campaign_id: str, attacker_name: str, attacker_data: dict, weapon: str) -> tuple[str | None, bool, str | None]:
+    """Resolve weapon damage formula for an attacker.
+
+    Args:
+        campaign_id: The campaign ID
+        attacker_name: Resolved attacker name
+        attacker_data: Attacker's combat state data (for bestiary_template lookup)
+        weapon: Weapon name to resolve
+
+    Returns:
+        (damage_formula, is_improvised, error) - error is None on success, message on failure
+    """
+    attacker_slug = slugify(attacker_name)
+    npc_data = npc_repo.get_npc(campaign_id, attacker_slug)
+
+    # For spawned enemies, use stored template; otherwise use participant name
+    bestiary_lookup = attacker_data.get("bestiary_template", attacker_name)
+    bestiary_entry = bestiary_repo.get_entry(campaign_id, bestiary_lookup)
+
+    # 1. NPCs with inventory - check real-time inventory
+    if npc_data and "inventory" in npc_data:
+        inventory = npc_data["inventory"]
+        items = inventory.get("items", {})
+
+        if weapon in items:
+            item = items[weapon]
+            if item.get("weapon") and item.get("damage"):
+                return (item["damage"], False, None)
+            else:
+                # Item exists but not a weapon - improvised
+                return ("1d4", True, None)
+        else:
+            # Check for unarmed attack
+            unarmed_keywords = ["fists", "fist", "punch", "kick", "unarmed", "bare hands"]
+            if weapon.lower() in unarmed_keywords:
+                return ("1d4", False, None)
+            else:
+                items_list = format_list_from_dict(items, "none (try 'fists' for unarmed)")
+                return (None, False, f"Error: {attacker_name} doesn't have '{weapon}' in inventory. Available items: {items_list}")
+
+    # 2. Bestiary monsters - use their defined weapons
+    elif bestiary_entry:
+        bestiary_weapons = bestiary_entry.get("weapons", {})
+        if weapon in bestiary_weapons:
+            return (bestiary_weapons[weapon], False, None)
+        else:
+            weapons_list = format_list_from_dict(bestiary_weapons)
+            return (None, False, f"Error: {attacker_name} doesn't have '{weapon}'. Available weapons: {weapons_list}")
+
+    # 3. Unknown participants
+    else:
+        return (None, False, f"Error: {attacker_name} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry).")
+
+
 def get_spawn_enemy_tool() -> Tool:
     """Return the spawn_enemy tool definition."""
     return Tool(
@@ -327,64 +381,12 @@ async def handle_attack(arguments: dict) -> list[TextContent]:
             if check_team_betrayal(combat_state, attacker_resolved, target_resolved):
                 result_lines.append(f"{attacker_resolved} has betrayed their team!")
 
-            # Get weapon damage: check real-time inventory (NPCs) and bestiary (monsters)
-            attacker_slug = slugify(attacker_resolved)
-            damage_formula = None
-            is_improvised = False
-
-            # Check if attacker is an NPC or monster
-            npc_data = npc_repo.get_npc(campaign_id, attacker_slug)
-            # For spawned enemies, use stored template; otherwise use participant name
-            bestiary_lookup = attacker_data.get("bestiary_template", attacker_resolved)
-            bestiary_entry = bestiary_repo.get_entry(campaign_id, bestiary_lookup)
-
-            # 1. NPCs with inventory - check real-time inventory (not combat state)
-            if npc_data and "inventory" in npc_data:
-                inventory = npc_data["inventory"]
-                items = inventory.get("items", {})
-
-                if weapon in items:
-                    item = items[weapon]
-                    # Check if it's a proper weapon
-                    if item.get("weapon") and item.get("damage"):
-                        damage_formula = item["damage"]
-                    else:
-                        # Item exists but not a weapon - allow as improvised (1d4)
-                        damage_formula = "1d4"
-                        is_improvised = True
-                else:
-                    # Check if unarmed attack (fists, punch, kick, etc.)
-                    unarmed_keywords = ["fists", "fist", "punch", "kick", "unarmed", "bare hands"]
-                    if weapon.lower() in unarmed_keywords:
-                        # Allow unarmed attacks with minimal damage
-                        damage_formula = "1d4"
-                        is_improvised = False  # Not improvised, just weak
-                    else:
-                        # Item doesn't exist in inventory
-                        items_list = format_list_from_dict(items, "none (try 'fists' for unarmed)")
-                        return [TextContent(
-                            type="text",
-                            text=f"Error: {attacker_resolved} doesn't have '{weapon}' in inventory. Available items: {items_list}"
-                        )]
-
-            # 2. Bestiary monsters - use their defined weapons only
-            elif bestiary_entry:
-                bestiary_weapons = bestiary_entry.get("weapons", {})
-                if weapon in bestiary_weapons:
-                    damage_formula = bestiary_weapons[weapon]
-                else:
-                    weapons_list = format_list_from_dict(bestiary_weapons)
-                    return [TextContent(
-                        type="text",
-                        text=f"Error: {attacker_resolved} doesn't have '{weapon}'. Available weapons: {weapons_list}"
-                    )]
-
-            # 3. Unknown participants - ERROR (must be NPC or bestiary entry)
-            else:
-                return [TextContent(
-                    type="text",
-                    text=f"Error: {attacker_resolved} is not a valid participant. Attackers must be either NPCs (use create_npc) or bestiary creatures (use create_bestiary_entry)."
-                )]
+            # Resolve weapon damage
+            damage_formula, is_improvised, weapon_error = resolve_weapon(
+                campaign_id, attacker_resolved, attacker_data, weapon
+            )
+            if weapon_error:
+                return [TextContent(type="text", text=weapon_error)]
 
             # Roll damage
             damage = roll_dice(damage_formula)
