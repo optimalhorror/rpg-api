@@ -17,6 +17,8 @@ from tools import (
     handle_attack,
     get_remove_from_combat_tool,
     handle_remove_from_combat,
+    get_spawn_enemy_tool,
+    handle_spawn_enemy,
     get_create_bestiary_entry_tool,
     handle_create_bestiary_entry,
     # Inventory tools
@@ -63,6 +65,7 @@ async def list_tools() -> list[Tool]:
         get_create_bestiary_entry_tool(),
         get_attack_tool(),
         get_remove_from_combat_tool(),
+        get_spawn_enemy_tool(),
         # Inventory tools
         get_add_item_tool(),
         get_remove_item_tool(),
@@ -104,6 +107,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     elif name == "remove_from_combat":
         return await handle_remove_from_combat(arguments)
+
+    elif name == "spawn_enemy":
+        return await handle_spawn_enemy(arguments)
 
     # Inventory tools
     elif name == "add_item":

@@ -1,7 +1,7 @@
 from mcp.types import Tool, TextContent
 
 from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance
-from repos import npc_repo, combat_repo
+from repos import npc_repo, combat_repo, resolve_npc_by_keyword
 
 
 def get_create_npc_tool() -> Tool:
@@ -130,7 +130,7 @@ def get_heal_npc_tool() -> Tool:
     """Return the heal_npc tool definition."""
     return Tool(
         name="heal_npc",
-        description="Heal an NPC by rolling healing dice (e.g., '1d4', '2d6'). Healing comes from items, rest, magic, etc. Cannot exceed max_health.",
+        description="Heal an NPC by rolling healing dice (e.g., '1d4', '2d6'). Accepts NPC name or keyword. Healing comes from items, rest, magic, etc. Cannot exceed max_health.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -140,7 +140,7 @@ def get_heal_npc_tool() -> Tool:
                 },
                 "npc_name": {
                     "type": "string",
-                    "description": "Name of the NPC to heal"
+                    "description": "Name or keyword of the NPC to heal (e.g., 'Steve', 'player', 'blacksmith')"
                 },
                 "heal_dice": {
                     "type": "string",
@@ -164,13 +164,13 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         heal_dice = arguments["heal_dice"]
         source = arguments.get("source", "healing")
 
-        npc_slug = slugify(npc_name)
+        # Resolve NPC by name or keyword
+        npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
 
-        npc_data = npc_repo.get_npc(campaign_id, npc_slug)
         if not npc_data:
             return [TextContent(
                 type="text",
-                text=f"NPC '{npc_name}' not found in campaign"
+                text=f"NPC '{npc_name}' not found in campaign. Use NPC name or keyword."
             )]
 
         # Roll healing
