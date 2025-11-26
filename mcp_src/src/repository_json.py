@@ -13,7 +13,7 @@ from repository import (
 from utils import get_campaign_dir, load_campaign_list, CAMPAIGNS_DIR, slugify
 
 
-def __npc_filename(slug: str) -> str:
+def _npc_filename(slug: str) -> str:
     """Convert NPC slug to filename. Example: 'steve' -> 'npc-steve.json'"""
     return f"npc-{slug}.json"
 
