@@ -58,7 +58,7 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
             existing_entry = bestiary[entry_key]
             weapon_list = ", ".join([f"{w} ({d})" for w, d in existing_entry.get("weapons", {}).items()])
             details = f"Existing: {existing_entry.get('threat_level')}, {existing_entry.get('hp')} HP, {weapon_list}. Use get_bestiary to view."
-            return [TextContent(text=err_already_exists("Bestiary entry", name, details))]
+            return [TextContent(type="text", text=err_already_exists("Bestiary entry", name, details))]
 
         # Add entry
         bestiary[entry_key] = {
@@ -77,4 +77,4 @@ async def handle_create_bestiary_entry(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(text=f"Error creating bestiary entry: {str(e)}")]
+        return [TextContent(type="text", text=f"Error creating bestiary entry: {str(e)}")]

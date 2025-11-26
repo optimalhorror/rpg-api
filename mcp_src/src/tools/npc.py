@@ -115,7 +115,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(text=f"Error creating NPC: {str(e)}")]
+        return [TextContent(type="text", text=f"Error creating NPC: {str(e)}")]
 
 
 def get_heal_npc_tool() -> Tool:
@@ -211,4 +211,4 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
         )]
 
     except Exception as e:
-        return [TextContent(text=f"Error healing NPC: {str(e)}")]
+        return [TextContent(type="text", text=f"Error healing NPC: {str(e)}")]

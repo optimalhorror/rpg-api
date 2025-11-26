@@ -68,28 +68,28 @@ async def handle_add_item(arguments: dict) -> list[TextContent]:
     # Resolve NPC by name or keyword
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     # Use resolved name for display
     resolved_name = npc_data.get("name", npc_name)
 
     # Validate weapon requirements
     if weapon and not damage:
-        return [TextContent(text=err_invalid("Weapon items must have damage specified."))]
+        return [TextContent(type="text", text=err_invalid("Weapon items must have damage specified."))]
 
     # Initialize inventory if needed
     ensure_inventory(npc_data)
 
     # Check if item already exists
     if item_name in npc_data["inventory"]["items"]:
-        return [TextContent(text=err_already_exists("Item", item_name, f"{resolved_name} already has this."))]
+        return [TextContent(type="text", text=err_already_exists("Item", item_name, f"{resolved_name} already has this."))]
 
     # Validate container exists if specified
     if container:
         items = npc_data["inventory"]["items"]
         if container not in items:
             items_list = format_list_from_dict(items)
-            return [TextContent(text=err_not_found("Container", container, f"Available: {items_list}"))]
+            return [TextContent(type="text", text=err_not_found("Container", container, f"Available: {items_list}"))]
 
     # Create item
     item_data = {
@@ -154,12 +154,12 @@ async def handle_remove_item(arguments: dict) -> list[TextContent]:
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     resolved_name = npc_data.get("name", npc_name)
 
     if "inventory" not in npc_data or item_name not in npc_data["inventory"]["items"]:
-        return [TextContent(text=err_missing(resolved_name, item_name))]
+        return [TextContent(type="text", text=err_missing(resolved_name, item_name))]
 
     # Remove item
     del npc_data["inventory"]["items"][item_name]
@@ -231,12 +231,12 @@ async def handle_update_item(arguments: dict) -> list[TextContent]:
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     resolved_name = npc_data.get("name", npc_name)
 
     if "inventory" not in npc_data or item_name not in npc_data["inventory"]["items"]:
-        return [TextContent(text=err_missing(resolved_name, item_name))]
+        return [TextContent(type="text", text=err_missing(resolved_name, item_name))]
 
     item = npc_data["inventory"]["items"][item_name]
     updates = []
@@ -299,7 +299,7 @@ async def handle_get_inventory(arguments: dict) -> list[TextContent]:
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     resolved_name = npc_data.get("name", npc_name)
 
@@ -365,7 +365,7 @@ async def handle_add_money(arguments: dict) -> list[TextContent]:
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     resolved_name = npc_data.get("name", npc_name)
 
@@ -415,7 +415,7 @@ async def handle_remove_money(arguments: dict) -> list[TextContent]:
 
     npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
     if not npc_data:
-        return [TextContent(text=err_not_found("NPC", npc_name))]
+        return [TextContent(type="text", text=err_not_found("NPC", npc_name))]
 
     resolved_name = npc_data.get("name", npc_name)
 
