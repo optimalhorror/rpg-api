@@ -388,3 +388,284 @@ class TestSyncNPCToCombat:
 
             # Should not raise
             repos_module.sync_npc_to_combat(campaign_id, "steve", 10)
+
+
+class TestNPCInsights:
+    """Test NPC insights feature."""
+
+    def test_npc_created_with_empty_insights(self, patched_repos):
+        """New NPCs should have empty insights array."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert retrieved["insights"] == []
+
+    def test_add_insight_to_npc(self, patched_repos):
+        """Test adding insights to NPC."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        # Add an insight
+        npc = npc_repo.get_npc(campaign_id, "steve")
+        npc["insights"].append("Witnessed the player slay the dragon")
+        npc_repo.save_npc(campaign_id, "steve", npc)
+
+        # Verify
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert len(retrieved["insights"]) == 1
+        assert "dragon" in retrieved["insights"][0]
+
+    def test_multiple_insights(self, patched_repos):
+        """Test adding multiple insights."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Marcus",
+            "insights": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "marcus", npc_data, ["marcus"])
+
+        # Add multiple insights
+        npc = npc_repo.get_npc(campaign_id, "marcus")
+        npc["insights"].append("Learned the mayor is corrupt")
+        npc["insights"].append("Discovered a secret passage")
+        npc["insights"].append("Saw the player steal from the merchant")
+        npc_repo.save_npc(campaign_id, "marcus", npc)
+
+        retrieved = npc_repo.get_npc(campaign_id, "marcus")
+        assert len(retrieved["insights"]) == 3
+
+    def test_insights_purged_on_delete(self, patched_repos):
+        """Insights are lost when NPC is deleted (dies)."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Bob",
+            "insights": ["Knew too much", "Had secrets"],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "bob", npc_data, ["bob"])
+
+        # Bob dies (gets deleted)
+        npc_repo.delete_npc(campaign_id, "bob")
+
+        # Insights are gone with the NPC
+        assert npc_repo.get_npc(campaign_id, "bob") is None
+
+    def test_backwards_compat_npc_without_insights(self, patched_repos):
+        """Older NPCs without insights field should work."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        # Create NPC without insights field (simulating old data)
+        old_npc_data = {
+            "name": "Old Timer",
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "old-timer", old_npc_data, ["old"])
+
+        # Should still work - just no insights
+        retrieved = npc_repo.get_npc(campaign_id, "old-timer")
+        assert retrieved is not None
+        assert retrieved.get("insights") is None  # Old format has no insights
+
+
+class TestNPCTodos:
+    """Test NPC todo/quest system."""
+
+    def test_npc_created_with_empty_todos(self, patched_repos):
+        """New NPCs should have empty todos array."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert retrieved["todos"] == []
+
+    def test_add_todo_to_npc(self, patched_repos):
+        """Test adding a todo to NPC."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        # Add a todo
+        npc = npc_repo.get_npc(campaign_id, "steve")
+        npc["todos"].append({
+            "name": "Find the sword",
+            "description": "Retrieve the stolen family heirloom",
+            "source": "Marcus",
+            "source_is_npc": True
+        })
+        npc_repo.save_npc(campaign_id, "steve", npc)
+
+        # Verify
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert len(retrieved["todos"]) == 1
+        assert retrieved["todos"][0]["name"] == "Find the sword"
+        assert retrieved["todos"][0]["source_is_npc"] is True
+
+    def test_complete_todo_removes_from_list(self, patched_repos):
+        """Completing a todo removes it from the list."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [{
+                "name": "Find the sword",
+                "description": "Get it",
+                "source": "Marcus",
+                "source_is_npc": True
+            }],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        # Remove the todo (simulating completion)
+        npc = npc_repo.get_npc(campaign_id, "steve")
+        npc["todos"].pop(0)
+        npc["insights"].append("Completed 'Find the sword'")
+        npc_repo.save_npc(campaign_id, "steve", npc)
+
+        # Verify
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert len(retrieved["todos"]) == 0
+        assert len(retrieved["insights"]) == 1
+
+    def test_todo_with_npc_source_cross_reference(self, patched_repos):
+        """Test that todos track NPC sources for insight propagation."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        # Create two NPCs
+        steve_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [{
+                "name": "Deliver package",
+                "description": "Bring the package to the inn",
+                "source": "Marcus the Guard",
+                "source_is_npc": True
+            }],
+            "health": 20,
+        }
+        marcus_data = {
+            "name": "Marcus the Guard",
+            "insights": [],
+            "todos": [],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", steve_data, ["steve"])
+        npc_repo.create_npc(campaign_id, "marcus-the-guard", marcus_data, ["marcus", "guard"])
+
+        # Complete Steve's todo and add insight to both
+        steve = npc_repo.get_npc(campaign_id, "steve")
+        todo = steve["todos"].pop(0)
+        steve["insights"].append(f"Completed '{todo['name']}' for {todo['source']}")
+        npc_repo.save_npc(campaign_id, "steve", steve)
+
+        # Add insight to Marcus (the source)
+        marcus = npc_repo.get_npc(campaign_id, "marcus-the-guard")
+        marcus["insights"].append(f"Steve completed 'Deliver package' for them")
+        npc_repo.save_npc(campaign_id, "marcus-the-guard", marcus)
+
+        # Verify both have insights
+        steve_final = npc_repo.get_npc(campaign_id, "steve")
+        marcus_final = npc_repo.get_npc(campaign_id, "marcus-the-guard")
+        assert len(steve_final["insights"]) == 1
+        assert len(marcus_final["insights"]) == 1
+        assert "Deliver package" in marcus_final["insights"][0]
+
+    def test_todo_source_npc_dead_no_insight(self, patched_repos):
+        """If source NPC is dead, no insight is added to them."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        # Create Steve with a todo from Marcus
+        steve_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [{
+                "name": "Avenge Marcus",
+                "description": "Kill the bandits",
+                "source": "Marcus",
+                "source_is_npc": True
+            }],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", steve_data, ["steve"])
+
+        # Marcus is dead (doesn't exist)
+        # Complete todo - should only add insight to Steve
+        steve = npc_repo.get_npc(campaign_id, "steve")
+        todo = steve["todos"].pop(0)
+        steve["insights"].append(f"Completed '{todo['name']}'")
+        npc_repo.save_npc(campaign_id, "steve", steve)
+
+        # Steve has insight, Marcus doesn't exist
+        steve_final = npc_repo.get_npc(campaign_id, "steve")
+        assert len(steve_final["insights"]) == 1
+        assert npc_repo.get_npc(campaign_id, "marcus") is None
+
+    def test_abandon_todo(self, patched_repos):
+        """Abandoning a todo removes it and adds insight."""
+        npc_repo = patched_repos["npc"]
+        campaign_id = patched_repos["campaign_id"]
+
+        npc_data = {
+            "name": "Steve",
+            "insights": [],
+            "todos": [{
+                "name": "Find treasure",
+                "description": "Search the cave",
+                "source": "self",
+                "source_is_npc": False
+            }],
+            "health": 20,
+        }
+        npc_repo.create_npc(campaign_id, "steve", npc_data, ["steve"])
+
+        # Abandon the todo
+        npc = npc_repo.get_npc(campaign_id, "steve")
+        todo = npc["todos"].pop(0)
+        npc["insights"].append(f"Abandoned '{todo['name']}': The cave collapsed")
+        npc_repo.save_npc(campaign_id, "steve", npc)
+
+        # Verify
+        retrieved = npc_repo.get_npc(campaign_id, "steve")
+        assert len(retrieved["todos"]) == 0
+        assert "Abandoned" in retrieved["insights"][0]
+        assert "cave collapsed" in retrieved["insights"][0]

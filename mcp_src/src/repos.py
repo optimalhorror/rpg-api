@@ -63,3 +63,26 @@ def resolve_npc_by_keyword(campaign_id: str, name: str) -> tuple[str, dict] | tu
                 return slug, npc_data
 
     return None, None
+
+
+def add_npc_insight(campaign_id: str, npc_name: str, insight: str) -> bool:
+    """Add insight to NPC if they exist.
+
+    Args:
+        campaign_id: The campaign ID
+        npc_name: NPC name or keyword
+        insight: The insight text to add
+
+    Returns:
+        True if added, False if NPC not found
+    """
+    npc_slug, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
+    if not npc_data:
+        return False
+
+    if "insights" not in npc_data:
+        npc_data["insights"] = []
+
+    npc_data["insights"].append(insight)
+    npc_repo.save_npc(campaign_id, npc_slug, npc_data)
+    return True

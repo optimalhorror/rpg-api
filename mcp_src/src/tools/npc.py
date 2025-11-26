@@ -1,7 +1,7 @@
 from mcp.types import Tool, TextContent
 
 from utils import slugify, roll_dice, health_description, healing_descriptor, threat_level_to_hit_chance, err_not_found, err_already_exists
-from repos import npc_repo, resolve_npc_by_keyword, sync_npc_to_combat
+from repos import npc_repo, resolve_npc_by_keyword, sync_npc_to_combat, add_npc_insight
 
 
 def get_create_npc_tool() -> Tool:
@@ -81,6 +81,8 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
             "name": npc_name,
             "keywords": keywords,
             "arc": arc,
+            "insights": [],
+            "todos": [],
             "health": health,
             "max_health": max_health,
             "hit_chance": hit_chance,
@@ -212,3 +214,56 @@ async def handle_heal_npc(arguments: dict) -> list[TextContent]:
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error healing NPC: {str(e)}")]
+
+
+def get_add_npc_insight_tool() -> Tool:
+    """Return the add_npc_insight tool definition."""
+    return Tool(
+        name="add_npc_insight",
+        description="Add a defining insight to an NPC's arc. Use when something significant happens that shapes who they are: witnessing events, learning secrets, forming opinions about the player, etc. Insights are purged when the NPC dies.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "campaign_id": {
+                    "type": "string",
+                    "description": "The campaign ID"
+                },
+                "npc_name": {
+                    "type": "string",
+                    "description": "Name or keyword of the NPC"
+                },
+                "insight": {
+                    "type": "string",
+                    "description": "The insight to add (e.g., 'Witnessed the player slay the dragon', 'Discovered the mayor is corrupt')"
+                }
+            },
+            "required": ["campaign_id", "npc_name", "insight"]
+        }
+    )
+
+
+async def handle_add_npc_insight(arguments: dict) -> list[TextContent]:
+    """Handle the add_npc_insight tool call."""
+    try:
+        campaign_id = arguments["campaign_id"]
+        npc_name = arguments["npc_name"]
+        insight = arguments["insight"]
+
+        if not add_npc_insight(campaign_id, npc_name, insight):
+            return [TextContent(
+                type="text",
+                text=err_not_found("NPC", npc_name, "Use NPC name or keyword.")
+            )]
+
+        # Get updated count for response
+        _, npc_data = resolve_npc_by_keyword(campaign_id, npc_name)
+        resolved_name = npc_data.get("name", npc_name)
+        insight_count = len(npc_data.get("insights", []))
+
+        return [TextContent(
+            type="text",
+            text=f"Insight added to {resolved_name}'s arc.\nTotal insights: {insight_count}"
+        )]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error adding insight: {str(e)}")]

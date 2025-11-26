@@ -1,5 +1,5 @@
 from .campaign import get_begin_campaign_tool, handle_begin_campaign, get_delete_campaign_tool, handle_delete_campaign
-from .npc import get_create_npc_tool, handle_create_npc, get_heal_npc_tool, handle_heal_npc
+from .npc import get_create_npc_tool, handle_create_npc, get_heal_npc_tool, handle_heal_npc, get_add_npc_insight_tool, handle_add_npc_insight
 from .combat import get_attack_tool, handle_attack, get_remove_from_combat_tool, handle_remove_from_combat, get_spawn_enemy_tool, handle_spawn_enemy
 from .bestiary import get_create_bestiary_entry_tool, handle_create_bestiary_entry
 from .inventory import (
@@ -18,6 +18,11 @@ from .readers import (
     get_get_combat_status_tool, handle_get_combat_status,
     get_get_bestiary_tool, handle_get_bestiary,
 )
+from .quests import (
+    get_add_npc_todo_tool, handle_add_npc_todo,
+    get_complete_todo_tool, handle_complete_todo,
+    get_abandon_todo_tool, handle_abandon_todo,
+)
 
 # Single source of truth for all tools: (name, get_tool_fn, handler_fn)
 # Add new tools here - server.py and mcp_bridge.py will auto-discover them
@@ -28,6 +33,11 @@ TOOL_REGISTRY = [
     # NPC
     ("create_npc", get_create_npc_tool, handle_create_npc),
     ("heal_npc", get_heal_npc_tool, handle_heal_npc),
+    ("add_npc_insight", get_add_npc_insight_tool, handle_add_npc_insight),
+    # Quests/Todos
+    ("add_npc_todo", get_add_npc_todo_tool, handle_add_npc_todo),
+    ("complete_todo", get_complete_todo_tool, handle_complete_todo),
+    ("abandon_todo", get_abandon_todo_tool, handle_abandon_todo),
     # Combat
     ("attack", get_attack_tool, handle_attack),
     ("remove_from_combat", get_remove_from_combat_tool, handle_remove_from_combat),

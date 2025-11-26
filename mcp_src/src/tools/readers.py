@@ -189,6 +189,20 @@ async def handle_get_npc(arguments: dict) -> list[TextContent]:
     if arc:
         result += f"Description: {arc}\n"
 
+    insights = npc_data.get("insights", [])
+    if insights:
+        result += f"\n--- Insights ({len(insights)}) ---\n"
+        for insight in insights:
+            result += f"  • {insight}\n"
+
+    todos = npc_data.get("todos", [])
+    if todos:
+        result += f"\n--- Todos ({len(todos)}) ---\n"
+        for todo in todos:
+            result += f"  • {todo['name']}\n"
+            result += f"    {todo['description']}\n"
+            result += f"    From: {todo['source']}\n"
+
     keywords = npc_data.get("keywords", [])
     if keywords:
         result += f"Keywords: {', '.join(keywords)}\n"
