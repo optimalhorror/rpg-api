@@ -95,7 +95,7 @@ async def handle_create_npc(arguments: dict) -> list[TextContent]:
         # Add starting weapons to inventory
         for weapon_name, damage in weapons.items():
             npc_data["inventory"]["items"][weapon_name] = {
-                "description": f"A {weapon_name.lower()}",
+                "description": weapon_name,
                 "source": "starting equipment",
                 "weapon": True,
                 "damage": damage
