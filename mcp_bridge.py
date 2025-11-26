@@ -18,6 +18,8 @@ from tools import (
     handle_attack,
     get_remove_from_combat_tool,
     handle_remove_from_combat,
+    get_spawn_enemy_tool,
+    handle_spawn_enemy,
     get_create_bestiary_entry_tool,
     handle_create_bestiary_entry,
     # Inventory tools
@@ -67,6 +69,7 @@ class MCPBridge:
             "heal_npc": handle_heal_npc,
             "attack": handle_attack,
             "remove_from_combat": handle_remove_from_combat,
+            "spawn_enemy": handle_spawn_enemy,
             "create_bestiary_entry": handle_create_bestiary_entry,
             # Inventory tools
             "add_item": handle_add_item,
@@ -92,6 +95,7 @@ class MCPBridge:
             "heal_npc": get_heal_npc_tool(),
             "attack": get_attack_tool(),
             "remove_from_combat": get_remove_from_combat_tool(),
+            "spawn_enemy": get_spawn_enemy_tool(),
             "create_bestiary_entry": get_create_bestiary_entry_tool(),
             # Inventory tools
             "add_item": get_add_item_tool(),
